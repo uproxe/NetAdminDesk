@@ -1,0 +1,54 @@
+{
+  "name": "netadmin-desk",
+  "productName": "NetAdmin Desk",
+  "version": "1.0.0",
+  "description": "Рабочее место системного администратора: SSH-клиент для коммутаторов и Linux-серверов, справочник команд, диагностика и сценарии",
+  "author": {
+    "name": "NetAdmin Desk",
+    "email": "netadmin-desk@localhost"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:watch": "node scripts/build.mjs --watch",
+    "start": "npm run build && electron .",
+    "smoke": "electron . --smoke-test",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test tests/unit/*.test.ts",
+    "test:sqljs": "cross-env NAD_DB_DRIVER=sqljs tsx --test tests/unit/db.test.ts tests/unit/vault.test.ts tests/unit/importExport.test.ts",
+    "test:ssh": "tsx --test tests/integration/ssh.test.ts",
+    "import-report": "tsx scripts/import-report.ts",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg --universal --publish never",
+    "dist:linux": "npm run build && electron-builder --linux deb --x64 --publish never",
+    "preview": "node scripts/build.mjs --preview",
+    "typecheck:offline": "tsc --noEmit -p tsconfig.offline.json && tsc --noEmit -p tsconfig.renderer-offline.json"
+  },
+  "dependencies": {
+    "sql.js": "^1.12.0",
+    "ssh2": "^1.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/sql.js": "^1.4.9",
+    "@types/ssh2": "^1.15.4",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-search": "^0.15.0",
+    "@xterm/xterm": "^5.5.0",
+    "cross-env": "^7.0.3",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

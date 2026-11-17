@@ -1,0 +1,312 @@
+!!!! conf t
+
+show env all - просмотр параметров: куллеров,температур, БП и т.д.
+show env temperature - просмотр параметра температуры
+show env power - БП
+show platform resources - проверка памяти
+macro auto disabled отключить макросы 
+
+
+
+sh ip arp   -   выдаст полные данные по ARP таблице
+sh ip arp vlan 10   -   выдаст полные данные по ARP таблице во VLAN 10
+sh ip arp | in 0011.2233.4455    - выдаст  данные из ARP таблицы по клиенту с МАС адресом 0011.2233.4455
+show ip arp | in 192.168.10.25 - выдаст данные из ARP таблицы по клиенту с IP 192.168.10.25
+clear ip arp 192.168.10.25 - стереть данные из ARP таблицы по клиенту с IP 192.168.10.25
+
+show vlan id 100 - просмотр на каких портах используется влан 100
+
+show ip interface brief - какие сети маршрутизируются на коммутаторе (только на коммутаторах 3 уровня)
+
+show etherchannel 2 summary - просмотр информации на каких портах активен Port-channel2
+
+show flash: - показывает какие файлы в памяти коммутатора
+dir flash: - показывает какие файлы в памяти коммутатора и занятое и свободное место
+show file systems - показывате сколько памяти всего и сколько свободной
+show memory - просмотр информации по оперативной памяти
+
+
+show system - показывает MAC и т.д.
+show system id - показывает серийный номер
+show inventory - посмотреть SN , фирму тип модуля (X2 , переходник и т.д)
+show version
+
+show history - просмотр истории команд
+show history all - просмотр всей истории
+show int counerts - просмотр счетчиков портов
+show int counerts err - просмотр ошибок на портах
+
+show log (show logging) - просмотр логов
+show log | section GigabitEthernet1/0/49 - просмотр логов только для сектора GigabitEthernet1/0/49
+(config)# logging buffered 65536 - установить буфер для записи логов, в данном примере 65536 bytes
+
+
+show interfaces status - просмотр статуса всех портов
+show interfaces counters - просмотр информации по портам (сколько информации передали)
+show interface counters errors - просмотр ошибок на портах
+show interfaces gigabitEthernet 1/0/5 counters errors - просмотр ошибок на порту gigabitEthernet 1/0/5
+clear counters gigabitEthernet 1/0/49 - стереть ошибки на порту gigabitEthernet 1/0/49
+show interfaces switchport ethernet g1 - просмотр конфигурации порта g1
+
+show etherchannel 21 port-channel - просмотр информации на каие порту накинут port-channel
+show etherchannel 21 summary
+show etherchannel port-channel | include 21
+
+show power inline - просмотр общей информации POE (общая мощность коммутатора, какая мощность потребления в данный момент) и т.д. 
+show power inline GigabitEthernet 1 - просмотр информации POE на порту GigabitEthernet 1
+show power inline consumption - просмотр информации POE по портам (какую мощность потребляют, максимальноя мощность потдерживая портом и т.д.)
+
+show system mtu - посмотреть глобальную настройку MTU
+show interfaces mtu - посмотреть MTU на интерфейсах
+
+
+show cdp neighbors  - паказывает какие cisco устройства подключены к коммутатору cisco
+
+show mac address-table показывает список всех МАС адресов активных устройств, которые подключены к коммутатор
+show mac address-table vlan 20
+show mac address-table address 0011.2233.4466 - показывает в каком Vlan и на каком порту устройство с mac адресом 0011.2233.4466
+show mac address-table interface tenGigabitEthernet 1/50 - показывате таблицу mac-адресов на порту 50
+show mac address-table ethernet e1 - показывате таблицу mac-адресов на порту 1
+
+
+reload in 5  - перезагрузка устрайства по истечению 5 минут.
+reload cancel - прервать команду на перезагрузку устройства
+
+
+SW-CORE-1# copy startup-config tftp://192.168.1.100/SW-CORE-1_230421 - сохранение конфигурации комутатора с имене SW-CORE-1 на tftp сервер
+
+
+show running-config interface vlan 100 - 
+interface Vlan100
+ ip address 192.168.20.30 255.255.255.224
+ ip helper-address 192.168.1.5
+ ip helper-address 192.168.1.6
+ ip access-group LAN_USERS in
+end
+
+
+no (номер строки) для удаления 
+
+show access-lists LAN_USERS - просмотр аксесс листа LAN_USERS
+Extended IP access list LAN_USERS
+    10 permit icmp any host 192.168.1.200
+......
+    210 deny ip any any log (18 matches)
+
+(config)#ip access-list extended LAN_SERVERS - зайти в интерфейс расширенного аксесс листа для редактирования
+2961 permit ip any host 192.168.30.27
+
+(config)#interface Vlan100 - заходим в интерфес
+(config-if)#no ip access-group LAN_USERS in - откручиваем аксесс лист от интерфейса
+(config)#no ip access-list extended LAN_OLD  - удаление расширенного аксесс лист LAN_OLD, если аксесс привязан к интерфейсу (в данном примере к Vlan403) то его вначале откручиваем от интерфейса
+(config)#ip access-list extended LAN_OLD - создать аксесс лист если его не было, сразу заходить в него и добавляешь правила (ACL)
+(config)#interface Vlan403 - потом заходим или создаем интерфейс
+(config-if)#ip access-group LAN_OLD in - и прикручиваем ACL на интерфейс на вход или на выход, в данном примере на вход (in)
+permit tcp any 10.0.0.0 0.0.127.255 established - раздрешить связь для хостов сети с 	10.0.0.1 по 10.0.127.254 до других хостов (за счет established в пакете TCP создается флаг на раздрешение связи обратно с хоста на который бул запрос).
+ip access-list resequence ACL_VLAN_100 10 10 - строки акксес листа 100 влана разбить с шагом 10. 
+show log | in LAN_OLD - просмотр логов
+
+(config)#object-group network LINUX_SERVERS - создать обджек группу если его не было, сразу заходить в него и добавляешь правила
+(config-network-group)#host 192.168.40.11
+(config-network-group)#host 192.168.40.12
+(config-network-group)#host 192.168.40.13 - добовляем хосты в обджек группу
+
+
+show object-group name MAIL_SERVERS - просмотр object-group
+(config)#object-group network MAIL_SERVERS - редактирование object-group
+
+(config)#default interface range fastEthernet 0/1-24 - Сброс конфигурации портов 1-24
+
+(config)#interface range port-channel 2, port-channel 3
+
+show vtp status
+(config)#vtp mode transparent - перевод коммутатора в прозрачный режим (протокола VTP), отключения режима который не дает создавать Vlan с номером больше 1005
+(config)#vtp mode off - отключения протокола vtp
+
+(config)# interface vlan 200
+SW-CORE-1(config-if)# ip address dhcp hostname SW-CORE-1 - автоматическая выдача IP адреса для коммутатора с именем SW-CORE-1 на интерфейсе vlan 200
+
+interface Vlan1
+ no ip address - нет IP адреса на 1 влане
+
+interface Vlan200
+ ip address 192.168.99.12 255.255.255.0 - статика IP адреса на коммутаторе, но также требуется прописать шлюз
+
+# configure terminal
+(config)# vlan database
+(config-vlan)# no vlan 202 - удаление vlan, без no создание vlan
+
+(config)# interface vlan 200 - зайти в настройки vlan 200, задать имя и т.д.
+
+(config)# no management access-list mlist - удаление access-list-а
+
+(config-if)#switchport trunk allowed vlan remove 61,202 - удаление с транкового интерфейса вланов 61,202
+
+
+(config-if)#passwords aging 0 - отсутствие старения паролей, 0 отключение старения
+
+Установка синхронизации времени с серверами NTP (.10 и .11) и удаление старого сервера (.12)
+clock timezone +3  - часовой пояс +3
+clock source sntp
+SW-ACCESS-2(config)# sntp server 192.168.1.10 - сервер времени
+SW-ACCESS-2(config)# sntp server 192.168.1.11 - сервер времени
+SW-ACCESS-2(config)# no sntp server 192.168.1.12 - удаление старого сервера
+
+(config)#no logging console - отключение вывода логов при подключении напрямую через сервисный порт.
+
+SW-ACCESS-3(config-if)#ip helper-address 192.168.1.5 адрес для выдачи IP адреса
+
+
+
+###SG300###
+
+(config-if)#ip ssh password-auth - при входе на коммутатор в автомате вводится сохраненный пароль.
+copy startup-config tftp://192.168.1.100/
+
+Синхронизация времен:
+clock timezone MSK +3
+clock source sntp
+sntp unicast client enable
+sntp unicast client poll
+sntp server 192.168.1.10 poll
+sntp server 192.168.1.11 poll
+
+
+###HP_ProCurva###
+
+show running-config interface
+show running-config interface d20
+show interfaces brief - просмотр статуса портов
+show mac-address 0011.2233.4477
+show mac-address b10
+show running-config interface trk3
+show mac-address ethernet e1 - просмотр mac-адреса на порту E1
+conf t - зайти в режим конфигурирования
+(config)# interface d12 name SERVER-1_MGMT - подписать дискрипшен на порту
+vlan 108 name OFFICE-108 - создать влан 108 с именем OFFICE-108
+vlan 108 tagged ethernet trk3 - добавить влан 108 к тагерированному порту (trk3 - порт чанел 3)
+vlan 108 tagged ethernet e24 - добавить влан 108 к тагерированному порту e24
+vlan 139 untagged ethernet b11
+no vlan 512 tagged ethernet trk3 - удалить vlan 512 с тагерированного порта (trk3 - порт чанел 3)
+interface b11 enable - включить интерфейс
+interface b11 disable - выключить интерфейс
+sh vlans 108 - просмотр информации по влан 108
+write memory - запись конфигурации
+copy running-config tftp 192.168.1.100 hp-switch-1.cfg - запись конфигурации на tftp сервер
+
+
+
+
+
+###Linksys###
+
+show interfaces switchport ethernet g5 - показывает информацию по порту
+show fdb - показывает все mac устройств
+show interfaces description - показывает description на всх портах
+
+show mac address-table ethernet e1 - показывате таблицу mac-адресов на порту e1
+
+copy tftp://192.168.1.100/firmware.ros image - обновление прошивки c tftp - сервера
+
+(config)# interface ethernet g23 - зайти в интерфейс для дальнейшей настройки
+(config)# interface range ethernet g1-11,g13-23 - зайти в интерфейс для дальнейшей настройки нескольких портов
+
+(config-if)# switchport trunk allowed vlan remove all - удаление всех Vlan с trunk порта
+
+(config)# vlan database
+(config-vlan)# vlan 59
+(config-vlan)# exit
+(config)# interface vlan 59
+(config-if)# name CAMERAS-59 - создание влан 59 и имени.
+
+(config)# vlan database
+(config-vlan)# no vlan 59 - удаление влан 59
+
+
+(config-if)# switchport trunk allowed vlan add 200 - добавление vlan 200 на trunk порту
+(config-if)# no switchport access vlan - удаление vlan c access порта
+
+
+
+###Telesis at-8000s###
+
+show bridge address-table - просмотр всех маков на коммутаторе
+show bridge address-table vlan 108 - просмотр мак адресов по влану 108
+show bridge address-table address 00-11-22-33-44-88 - на каком порту и влан устройства с маком 00-11-22-33-44-88
+show bridge address-table ethernet e23 - просмотр мак адресов на порту 23
+show interfaces switchport ethernet e15 - просмотр конфигурации порта e15
+
+copy running-config startup-config - сохранить конфигурацию
+
+
+
+###Telesis###
+
+show interface - статистика по портам
+show interfaces status - статистика по портам
+show interface=14
+show config dynamic - просмотр всей конфигурации
+show switch port=8 - просмотр конфигурации на порту 8
+show vlan port=14 - просмотр информации какие вланы (транк, натив) на порту
+show config dynamic=class  - просмотр аксесс листа
+show config dynamic=ip - какие сети маршрутизируются
+sh conf dyn=vlan - просмотр информации по вланам к кому порту 
+
+show vlan - просмотр информации по всем вланам
+sh vlan=401 - просмотр информации по влан 401
+sh ip arp - показывает информацию: по вланом, IP и макам
+show switch fdb - показывает все mac устройств
+show switch fdb port=1 показывает все mac устройств на порту 1
+show switch fdb vlan=18 - оказывает все mac устройств во влан 18
+show switch fdb address=00-11-22-33-44-99 - показывает в каком влане и на каком порту устройство с mac-адресом 00-11-22-33-44-99
+
+SecOff SW-AT-1> create vlan=OFFICE-108 vid=108 - создание влан 108 с именем OFFICE-108
+SecOff SW-AT-1> add vlan="401" port=8 frame=tagged - добавить влан 401 к таггерированному порту 8
+SecOff SW-AT-1> delete vlan=308 port=7 - удаление влан 308 с тагерированного порта 7 (аксесный порт точно также)
+delete vlan=1 port=49-50 - пример удаления vlan1 взят из статьи.
+
+SecOff SW-AT-1> sh config  - просмотр информации как называется файл на коммутатаре загрузчик, для сохранения конфигурации
+Boot configuration file: flash:boot.cfg (exists)
+Current configuration: flash:boot.cfg
+
+SecOff SW-AT-1> create config=boot.cfg - сохранение конфигурации (см выше имя в которе надо сохранять)
+
+SecOff SW-AT-1> upload file=boot.cfg method=tftp server=192.168.1.100 destfile=sw-at-1_backup.cfg - сохранение конфигурации на tftp-сервер
+
+
+
+###Qtech### 
+show interface ethernet status
+show interface ethernet counter packet
+show interface ethernet counter rate
+show version
+
+
+###OSNOVO###
+show switch - просмотр мак адреса и серийного номера устройства
+show version - просмотр модели коммутатора
+show interface - просмотр иформации на портах
+show interface ge1/1 - просмотр иформации на порту
+show interface statistics ge1/1 - просмотр статистики на порту
+show bridge fdb interface ge1/5 - прсмотр MAC адреса на порту
+show bridge fdb vlan 20 - прсмотр MAC адрес VLAN20
+show interface brief L2 - просмотр статистики и активности портов
+
+
+
+(config)#interface ge1/8 ge1/10 - произвести настройку сразу нескольких портов
+(config)#username ИМЯ password ПАРОЛЬ privilege - задать пользавателю пароль
+(config)security-manage telnet disable - отключить телнет
+Синхронизация времени
+sntp server 192.168.1.10
+sntp server 192.168.1.11
+sntp time-zone +3.00
+sntp enable
+
+
+
+TP-link
+#copy startup-config tftp ip-address 192.168.1.100 filename SW-ACCESS-4_backup.cfg
+
+
+Telesis: учётная запись по умолчанию — manager (на части моделей admin), заводской пароль указан в документации производителя. Смените его при первой настройке. 

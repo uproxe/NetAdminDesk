@@ -1,0 +1,87 @@
+# Сборка установщиков NetAdmin Desk (electron-builder 26).
+# Имена файлов заданы требованиями: NetAdminDesk-Windows-x64-Setup.exe,
+# NetAdminDesk-macOS-Universal.dmg, netadmindesk-linux-amd64.deb.
+# Сборки НЕ подписаны сертификатами разработчика — см. docs/BUILD.md.
+appId: local.netadmin.desk
+productName: NetAdmin Desk
+copyright: NetAdmin Desk
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - "!dist/**/*.map"
+  - package.json
+asar: true
+# Нативные модули не используются (sql.js — WebAssembly, ssh2 — без необязательной нативной части),
+# поэтому пересборка под Electron не нужна, а универсальная сборка macOS собирается без конфликтов.
+npmRebuild: false
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  # Подписи нет: при запуске Windows SmartScreen покажет предупреждение.
+  artifactName: NetAdminDesk-Windows-x64-Setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: NetAdmin Desk
+  # Данные пользователя (база, бэкапы) при удалении программы сохраняются.
+  deleteAppDataOnUninstall: false
+  artifactName: NetAdminDesk-Windows-x64-Setup.${ext}
+
+mac:
+  target:
+    - target: dmg
+      arch: [universal]
+  category: public.app-category.utilities
+  icon: build/icon.png
+  # Сертификата Apple Developer нет: подпись ad-hoc выполняется в build/afterSign.js,
+  # нотаризации нет — Gatekeeper покажет предупреждение (см. docs/BUILD.md).
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  artifactName: NetAdminDesk-macOS-Universal.${ext}
+  extendInfo:
+    LSApplicationCategoryType: public.app-category.utilities
+    NSHumanReadableCopyright: NetAdmin Desk
+dmg:
+  artifactName: NetAdminDesk-macOS-Universal.${ext}
+  sign: false
+afterSign: build/afterSign.js
+
+linux:
+  target:
+    - target: deb
+      arch: [x64]
+  icon: build/icon.png
+  category: Network
+  executableName: netadmindesk
+  synopsis: SSH-клиент и справочник команд для коммутаторов и Linux-серверов
+  description: >-
+    NetAdmin Desk — рабочее место системного администратора: SSH-сессии с вкладками,
+    справочник команд коммутаторов и Linux, диагностика, сценарии, резервные копии конфигураций.
+  maintainer: NetAdmin Desk <netadmin-desk@localhost>
+  artifactName: netadmindesk-linux-amd64.${ext}
+deb:
+  # libsecret нужен для хранения паролей в связке ключей GNOME/KDE (safeStorage).
+  depends:
+    - libgtk-3-0 | libgtk-3-0t64
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0 | libatspi2.0-0t64
+    - libuuid1
+    - libsecret-1-0
+    - libasound2 | libasound2t64
+  artifactName: netadmindesk-linux-amd64.${ext}
