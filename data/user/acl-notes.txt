@@ -1,0 +1,51 @@
+show access-list - показать акцесс лист
+ip access-list extended 100 - открывает редактирование расширеный acl номер 100
+conf t - режим конфигурации
+no 640  - номер правила который удаляем
+640 permit ip host 192.168.50.11 any - создаем правило для всей безопасной сети доступ к этому хосту
+
+создать группу
+object-group network VIDEO_SERVERS
+host 192.168.50.11
+host 192.168.50.12
+host 192.168.50.13
+host 192.168.50.14
+host 192.168.50.15
+exit
+
+используем группу в акцесс листе 
+ip access-list extended 100
+640 permit ip object-group VIDEO_SERVERS any (ip маска - если надо к конкретной подсети
+end
+write memory - запись в конфиг
+
+если мы хотим порт то указываем вместо ip tcp и в конце указываем any eq <номер порта> 
+
+посмотреть группу 
+show running-config | section <название группы>
+
+на осново можно посмотреть маки на порту так
+show bridge fdb interface ge1/5 
+
+
+host это то что за безопасной сетью - например сервер видеонаблюдения 
+если нужно дать доступ серверу к определенной группе то делаем так
+
+conf t 
+object-group network <название группы>
+host xxx.xx.xx.xx
+host xxx.xx.xx.xx
+exit
+ip access-list extended 100
+no 650
+650 permit tcp host xxx.xx.xx.xx object-group <название группы> eq 554
+end
+whrite memory
+
+
+мак адрес на порту циско посмотреть
+show mac address-table interface fa1
+
+посмотреть статус портов show interfaces status
+
+Узнать ip на магистральном по маку show arp | include ....
