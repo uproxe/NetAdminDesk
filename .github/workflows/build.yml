@@ -1,0 +1,198 @@
+# Сборка, тесты и установщики NetAdmin Desk для Windows, macOS и Linux.
+# Установщики собираются только здесь, на «родных» раннерах каждой ОС.
+# Подписи сертификатами разработчика нет — см. docs/BUILD.md.
+name: build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  # Скрипты установки пакетов не выполняются: Electron для упаковки скачивает electron-builder,
+  # а необязательная нативная часть ssh2 не нужна (используется реализация на JavaScript).
+  NPM_INSTALL: npm install --ignore-scripts --no-audit --no-fund
+
+jobs:
+  test:
+    name: Тесты (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: ${{ env.NPM_INSTALL }}
+      - name: Модульные тесты (драйвер node:sqlite)
+        run: npm test
+      - name: Тесты базы на sql.js (драйвер приложения)
+        run: npm run test:sqljs
+      - name: Проверка типов
+        # Сборка (esbuild) не зависит от проверки типов, поэтому ошибки типов показываются, но не блокируют установщики.
+        continue-on-error: true
+        run: npm run typecheck
+      - name: Сборка
+        run: npm run build
+      - name: Отчёт импорта TXT
+        run: npm run import-report -- --out import-report.md
+      - uses: actions/upload-artifact@v6
+        with:
+          name: import-report
+          path: import-report.md
+
+  ssh-integration:
+    name: SSH против OpenSSH (docker)
+    runs-on: ubuntu-24.04
+    env:
+      NAD_SSH_HOST: 127.0.0.1
+      NAD_SSH_PORT: '2222'
+      NAD_SSH_USER: nad
+      # Одноразовый пароль тестового контейнера, существующего только во время CI.
+      NAD_SSH_PASS: nad-ci-only-password
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: ${{ env.NPM_INSTALL }}
+      - name: Запуск тестового sshd
+        run: |
+          docker build -t nad-sshd - <<'DOCKERFILE'
+          FROM debian:stable-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends openssh-server \
+           && rm -rf /var/lib/apt/lists/* && mkdir -p /run/sshd \
+           && useradd -m -s /bin/bash nad && echo 'nad:nad-ci-only-password' | chpasswd \
+           && printf 'PasswordAuthentication yes\nAllowTcpForwarding yes\n' > /etc/ssh/sshd_config.d/ci.conf
+          CMD ["/usr/sbin/sshd", "-D", "-e"]
+          DOCKERFILE
+          docker run -d --name sshd -p 2222:22 nad-sshd
+          for i in $(seq 1 30); do (echo > /dev/tcp/127.0.0.1/2222) 2>/dev/null && break; sleep 1; done
+      - name: Интеграционные тесты SSH
+        run: npm run test:ssh
+      - name: Журнал sshd
+        if: always()
+        run: docker logs sshd || true
+
+  package:
+    name: Установщик ${{ matrix.name }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            builder: --win nsis --x64
+            artifact: NetAdminDesk-Windows-x64-Setup.exe
+          - name: macOS Universal
+            os: macos-latest
+            builder: --mac dmg --universal
+            artifact: NetAdminDesk-macOS-Universal.dmg
+          - name: Linux amd64 (deb)
+            os: ubuntu-24.04
+            builder: --linux deb --x64
+            artifact: netadmindesk-linux-amd64.deb
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: ${{ env.NPM_INSTALL }}
+      - run: npm run build
+      - name: Сборка установщика
+        run: npx electron-builder ${{ matrix.builder }} --publish never
+        env:
+          # Автоматический поиск сертификатов отключён: сборка без подписи разработчика.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Проверка имени файла
+        shell: bash
+        run: |
+          ls -la release
+          test -f "release/${{ matrix.artifact }}"
+
+      # ---- Самопроверка собранного приложения (--smoke-test) ----
+      - name: Самопроверка (Linux, установленный .deb)
+        timeout-minutes: 8
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb "./release/${{ matrix.artifact }}"
+          BIN="$(dpkg -L $(dpkg-deb -f release/${{ matrix.artifact }} Package) | grep -E '/netadmindesk$' | head -1)"
+          echo "Исполняемый файл: $BIN"
+          export NETADMIN_DESK_DATA="$RUNNER_TEMP/nad-data" NAD_SMOKE_OUT="$RUNNER_TEMP/smoke.json"
+          # --no-sandbox только для CI: на раннерах Ubuntu 24.04 AppArmor ограничивает пространства имён.
+          timeout 180 xvfb-run -a "$BIN" --smoke-test --no-sandbox
+          cat "$NAD_SMOKE_OUT"
+      - name: Самопроверка (Windows, установка NSIS в тихом режиме)
+        timeout-minutes: 8
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:NETADMIN_DESK_DATA = "$env:RUNNER_TEMP\nad-data"
+          $env:NAD_SMOKE_OUT = "$env:RUNNER_TEMP\smoke.json"
+          $setup = Start-Process -FilePath "release\${{ matrix.artifact }}" -ArgumentList '/S' -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Установщик завершился с кодом $($setup.ExitCode)" }
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\NetAdmin Desk\NetAdmin Desk.exe'
+          if (-not (Test-Path $exe)) { Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter *.exe | Select-Object -First 20 FullName; throw 'Приложение не найдено после установки' }
+          $p = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -Wait -PassThru
+          Get-Content $env:NAD_SMOKE_OUT
+          if ($p.ExitCode -ne 0) { throw "Самопроверка не пройдена: код $($p.ExitCode)" }
+      - name: Самопроверка (macOS, приложение из .dmg)
+        timeout-minutes: 8
+        if: runner.os == 'macOS'
+        run: |
+          MNT=$(hdiutil attach -nobrowse -readonly "release/${{ matrix.artifact }}" | awk -F'\t' '/\/Volumes\//{print $NF}' | tail -1)
+          echo "Смонтировано: $MNT"
+          cp -R "$MNT/NetAdmin Desk.app" "$RUNNER_TEMP/"
+          hdiutil detach "$MNT"
+          APP="$RUNNER_TEMP/NetAdmin Desk.app"
+          echo "Архитектуры:"; lipo -archs "$APP/Contents/MacOS/NetAdmin Desk"
+          lipo -archs "$APP/Contents/MacOS/NetAdmin Desk" | grep -q x86_64
+          lipo -archs "$APP/Contents/MacOS/NetAdmin Desk" | grep -q arm64
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          export NETADMIN_DESK_DATA="$RUNNER_TEMP/nad-data" NAD_SMOKE_OUT="$RUNNER_TEMP/smoke.json"
+          "$APP/Contents/MacOS/NetAdmin Desk" --smoke-test
+          cat "$NAD_SMOKE_OUT"
+
+      - name: Контрольная сумма
+        shell: bash
+        run: |
+          cd release
+          if command -v sha256sum >/dev/null; then sha256sum "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"; else shasum -a 256 "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"; fi
+          cat "${{ matrix.artifact }}.sha256"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/${{ matrix.artifact }}
+            release/${{ matrix.artifact }}.sha256
+          if-no-files-found: error
+
+  release:
+    name: Публикация релиза (только для тегов v*)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [package, ssh-integration]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          path: dist-release
+          merge-multiple: true
+      - run: ls -la dist-release
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist-release/*
+          body: |
+            Установщики NetAdmin Desk ${{ github.ref_name }}.
+            Сборки не подписаны сертификатами разработчика: Windows SmartScreen и macOS Gatekeeper покажут предупреждение при первом запуске (см. docs/BUILD.md).
