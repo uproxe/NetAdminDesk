@@ -1,0 +1,12 @@
+.xterm-stub {
+  margin: 0;
+  padding: 6px 8px;
+  height: 100%;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--mono);
+  line-height: 1.25;
+  outline: none;
+  box-sizing: border-box;
+}
