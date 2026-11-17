@@ -1,0 +1,5 @@
+* text=auto eol=lf
+# Исходные TXT пользователя хранятся побайтно как есть (кодировка и окончания строк не меняются).
+data/user/*.txt -text
+*.png binary
+*.wasm binary
