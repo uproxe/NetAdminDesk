@@ -15,6 +15,7 @@ import { DeviceEditor } from './components/DeviceEditor';
 import { HomeView } from './views/HomeView';
 import { DevicesView, ExportDevicesDialog, ImportDevicesDialog } from './views/DevicesView';
 import { MonitorView } from './views/MonitorView';
+import { PasswordsView } from './views/PasswordsView';
 import { QuickConnect, SessionsView, sessionsAction } from './views/SessionsView';
 import { NotesPanel, ReferenceView } from './views/ReferenceView';
 import { LearnView } from './views/LearnView';
@@ -234,7 +235,7 @@ export function App() {
           </Button>
           <Button size="sm" variant="ghost" iconOnly icon="info" title="Горячие клавиши (F1)" onClick={showHotkeys} />
         </header>
-        <div className={`content ${['sessions', 'reference', 'switches', 'linux', 'learn', 'notes', 'devices', 'scenarios', 'backups', 'favorites'].includes(app.section) ? 'no-scroll' : ''}`}>
+        <div className={`content ${['sessions', 'reference', 'switches', 'linux', 'learn', 'notes', 'devices', 'scenarios', 'backups', 'favorites', 'passwords'].includes(app.section) ? 'no-scroll' : ''}`}>
           <div style={{ display: app.section === 'sessions' ? 'block' : 'none', height: '100%' }}>
             <SessionsView visible={app.section === 'sessions'} />
           </div>
@@ -245,6 +246,7 @@ export function App() {
           {app.section === 'sql' && <ReferenceView preset="sql" />}
           {app.section === 'usergate' && <ReferenceView preset="usergate" />}
           {app.section === 'monitor' && <MonitorView />}
+          {app.section === 'passwords' && <PasswordsView />}
           {app.section === 'learn' && <LearnView />}
           {app.section === 'notes' && (
             <div className="columns" style={{ flexDirection: 'column' }}>

@@ -37,6 +37,7 @@ export const NAV: NavItem[] = [
   { id: 'notes', label: 'Мои заметки', icon: 'note', group: 'ref', tier: 'extra', hint: 'Свои записи и шпаргалки' },
   { id: 'favorites', label: 'Избранное', icon: 'star', group: 'ref', tier: 'extra', hint: 'Отмеченные звёздочкой команды и сценарии' },
   { id: 'monitor', label: 'Мониторинг', icon: 'pulse', group: 'tools', tier: 'core', hint: 'Карта сети: какие устройства в сети, а какие нет (ping, SNMP, трапы), оповещения', keywords: 'мониторинг карта сети доступность snmp трап zabbix заббикс ping не в сети упал оповещение почта' },
+  { id: 'passwords', label: 'Менеджер паролей', icon: 'key', group: 'tools', tier: 'core', hint: 'Логины, пароли и заметки под мастер-паролем — как KeePass; генератор, импорт и экспорт', keywords: 'пароли менеджер паролей keepass кипасс логин хранилище секреты генератор паролей bitwarden' },
   { id: 'scenarios', label: 'Сценарии', icon: 'list', group: 'tools', tier: 'core', hint: 'Готовые пошаговые действия: VLAN, PoE, диски, службы' },
   { id: 'diagnostics', label: 'Диагностика', icon: 'activity', group: 'tools', tier: 'core', hint: 'Проверка порта, коммутатора и сервера одной кнопкой' },
   { id: 'nettools', label: 'Сетевые утилиты', icon: 'calculator', group: 'tools', tier: 'extra', hint: 'Калькулятор подсетей, MAC-адреса, ping, проверка порта, SSH-ключи', keywords: 'калькулятор маска подсеть ip ping трассировка mac ключ' },
@@ -55,7 +56,8 @@ export const NAV_TITLES: Record<string, string> = {
   learn: 'Обучение: руководства и словарь',
   nettools: 'Сетевые утилиты',
   usergate: 'Справочник UserGate NGFW',
-  monitor: 'Мониторинг: карта сети и доступность'
+  monitor: 'Мониторинг: карта сети и доступность',
+  passwords: 'Менеджер паролей'
 };
 
 type NavSettings = Pick<Settings, 'uiMode' | 'navOverrides' | 'navCollapsed'>;

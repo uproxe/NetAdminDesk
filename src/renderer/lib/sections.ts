@@ -17,4 +17,5 @@ export type Section =
   | 'backups'
   | 'nettools'
   | 'monitor'
+  | 'passwords'
   | 'settings';
