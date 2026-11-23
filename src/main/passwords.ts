@@ -3,7 +3,8 @@
 // Ключ и расшифрованные записи живут только в памяти main-процесса, пока менеджер открыт;
 // при блокировке ключ затирается, а скопированный пароль убирается из буфера обмена.
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
+import { decodeText } from '../shared/txtImport';
 import type { AppDatabase } from './db/database';
 import { deriveKeyAsync, open, seal, type KdfParams, type Sealed } from './crypto';
 import {
@@ -94,6 +95,9 @@ export class PasswordLockedError extends Error {
   }
 }
 
+/** Самый большой файл, который принимает импорт (экспорт KeePassXC на 10 000 записей ≈ 3 МБ). */
+export const PM_IMPORT_MAX_BYTES = 20 * 1024 * 1024;
+
 export class PasswordStore {
   private key: Buffer | null = null;
   private entries = new Map<string, PmEntryData>();
@@ -102,6 +106,12 @@ export class PasswordStore {
   private failures = 0;
   private retryAt = 0;
   private lockedReason: PmLockReason = 'startup';
+  /**
+   * Номер сеанса: растёт при каждой блокировке. Долгие операции (scrypt идёт в фоне)
+   * запоминают его до await и после проверяют, что за это время не было блокировки —
+   * иначе смена мастер-пароля упала бы на стёртом ключе, а экспорт записал бы пустой файл.
+   */
+  private epoch = 0;
   private imports = new Map<string, PendingImport>();
   private copied: { value: string; timer: ReturnType<typeof setTimeout> | null } | null = null;
   private readonly now: () => number;
@@ -147,6 +157,11 @@ export class PasswordStore {
     checkMaster(password);
     const kdf = this.newKdf();
     const key = await deriveKeyAsync(password, kdf);
+    if (this.meta()) {
+      // второй одновременный вызов (двойное нажатие «Создать»)
+      key.fill(0);
+      throw new Error('Мастер-пароль уже создан');
+    }
     const meta: MasterMeta = { version: 1, kdf, check: seal(key, CHECK_TEXT, CHECK_AAD), createdAt: new Date(this.now()).toISOString() };
     this.db.setMeta(META_KEY, JSON.stringify(meta));
     this.key = key;
@@ -162,7 +177,18 @@ export class PasswordStore {
     if (this.key) return this.status();
     const wait = Math.ceil((this.retryAt - this.now()) / 1000);
     if (wait > 0) throw new Error(`Слишком много неверных попыток. Подождите ${wait} с.`);
+    const epoch = this.epoch;
     const key = await deriveKeyAsync(String(password ?? ''), meta.kdf);
+    if (this.key) {
+      // параллельный вызов уже открыл менеджер
+      key.fill(0);
+      return this.status();
+    }
+    if (epoch !== this.epoch) {
+      // пока вычислялся ключ, экран заблокировали или окно свернули — не открываем
+      key.fill(0);
+      throw new Error('Разблокировка прервана: экран был заблокирован или окно свёрнуто. Введите мастер-пароль ещё раз.');
+    }
     try {
       if (open(key, meta.check, CHECK_AAD).toString('utf8') !== CHECK_TEXT) throw new Error();
     } catch {
@@ -193,6 +219,7 @@ export class PasswordStore {
 
   lock(reason: PmLockReason = 'manual'): void {
     const wasUnlocked = !!this.key;
+    this.epoch++;
     if (this.key) this.key.fill(0);
     this.key = null;
     this.entries = new Map();
@@ -208,6 +235,7 @@ export class PasswordStore {
     if (!meta) throw new Error('Мастер-пароль ещё не создан');
     this.requireKey();
     checkMaster(next);
+    const epoch = this.epoch;
     const curKey = await deriveKeyAsync(String(current ?? ''), meta.kdf);
     try {
       open(curKey, meta.check, CHECK_AAD);
@@ -216,15 +244,23 @@ export class PasswordStore {
     } finally {
       curKey.fill(0);
     }
+    this.stillOpen(epoch);
     const kdf = this.newKdf();
     const key = await deriveKeyAsync(next, kdf);
+    let oldKey: Buffer;
+    try {
+      oldKey = this.stillOpen(epoch);
+    } catch (e) {
+      key.fill(0);
+      throw e;
+    }
     const newMeta: MasterMeta = { version: 1, kdf, check: seal(key, CHECK_TEXT, CHECK_AAD), createdAt: meta.createdAt };
     this.db.tx(() => {
       for (const [uid, g] of this.groups) this.db.pmPut('pm_groups', uid, JSON.stringify(seal(key, JSON.stringify(g), groupAad(uid))));
       for (const [uid, e] of this.entries) this.db.pmPut('pm_entries', uid, JSON.stringify(seal(key, JSON.stringify(e), entryAad(uid))));
       this.db.setMeta(META_KEY, JSON.stringify(newMeta));
     });
-    this.key!.fill(0);
+    oldKey.fill(0);
     this.key = key;
     this.touch();
   }
@@ -248,6 +284,12 @@ export class PasswordStore {
   private requireKey(): Buffer {
     if (!this.key) throw new PasswordLockedError();
     this.touch();
+    return this.key;
+  }
+
+  /** После await: если менеджер успели заблокировать — прервать операцию. */
+  private stillOpen(epoch: number): Buffer {
+    if (epoch !== this.epoch || !this.key) throw new PasswordLockedError();
     return this.key;
   }
 
@@ -422,8 +464,15 @@ export class PasswordStore {
   async exportNadpass(password: string): Promise<{ content: string; count: number }> {
     this.requireKey();
     if (!password || password.length < PM_MIN_MASTER) throw new Error(`Пароль файла должен быть не короче ${PM_MIN_MASTER} символов`);
+    const epoch = this.epoch;
     const kdf = this.newKdf();
     const key = await deriveKeyAsync(password, kdf);
+    try {
+      this.stillOpen(epoch);
+    } catch (e) {
+      key.fill(0);
+      throw e;
+    }
     const payload = this.exportPayload();
     const sealed = seal(key, JSON.stringify(payload), PM_FILE_FORMAT);
     key.fill(0);
@@ -443,7 +492,9 @@ export class PasswordStore {
   /** CSV без шифрования — только после повторного ввода мастер-пароля. */
   async exportCsv(masterPassword: string): Promise<{ content: string; count: number }> {
     this.requireKey();
+    const epoch = this.epoch;
     await this.verifyMaster(masterPassword);
+    this.stillOpen(epoch);
     const p = this.exportPayload();
     const rows = [PM_CSV_HEADERS, ...p.entries.map((e) => [e.group, e.title, e.username, e.password, e.url, e.notes, e.updatedAt, e.createdAt])];
     return { content: '﻿' + toCsv(rows), count: p.entries.length };
@@ -467,7 +518,9 @@ export class PasswordStore {
   /** Читает файл и готовит предпросмотр. Для .nadpass записи появятся после ввода пароля файла. */
   importOpen(path: string): PmImportPreview {
     this.requireKey();
-    const text = readFileSync(path, 'utf8');
+    if (statSync(path).size > PM_IMPORT_MAX_BYTES) throw new Error(`Файл больше ${PM_IMPORT_MAX_BYTES / 1024 / 1024} МБ — это не похоже на выгрузку паролей`);
+    // Excel в русской Windows сохраняет CSV в Windows-1251, KeePass и браузеры — в UTF-8
+    const { text } = decodeText(readFileSync(path));
     const file = path.split(/[\\/]/).pop() ?? path;
     const token = randomUUID();
     let parsed: unknown = null;
@@ -496,7 +549,14 @@ export class PasswordStore {
     const p = this.imports.get(token);
     if (!p || !p.raw) throw new Error('Импорт не найден — откройте файл заново');
     let payload: ExportPayload;
+    const epoch = this.epoch;
     const key = await deriveKeyAsync(String(password ?? ''), p.raw.kdf);
+    try {
+      this.stillOpen(epoch);
+    } catch (e) {
+      key.fill(0);
+      throw e;
+    }
     try {
       payload = JSON.parse(open(key, p.raw, PM_FILE_FORMAT).toString('utf8'));
     } catch {

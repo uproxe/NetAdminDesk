@@ -325,3 +325,72 @@ test('генератор паролей: длина, наборы символо
   assert.ok(estimateStrength('Тёплый-Вечер-2026').bits > estimateStrength('теплыйвечер').bits);
   assert.deepEqual(withPmDefaults({ autoLockMin: -5, clipboardClearSec: 9999 }), { ...DEFAULT_PM, autoLockMin: 0, clipboardClearSec: 600 });
 });
+
+test('менеджер паролей: блокировка во время долгих операций не теряет данные и не пишет пустые файлы', async () => {
+  const dir = tmpDir();
+  const { db, pm } = await store();
+  await pm.setup(MASTER);
+  const e = pm.save(entry({ title: 'Ядро', password: 'Core-Pass-0001' }));
+  const metaBefore = db.getMeta('pm_master');
+  const rowsBefore = JSON.stringify(db.pmRows('pm_entries'));
+
+  // смена мастер-пароля, а пока вычисляется ключ — автоблокировка
+  const change = pm.changeMaster(MASTER, 'Brand-New-Master-1');
+  pm.lock('idle');
+  await assert.rejects(change, /заблокирован/);
+  assert.equal(db.getMeta('pm_master'), metaBefore, 'параметры ключа не изменились');
+  assert.equal(JSON.stringify(db.pmRows('pm_entries')), rowsBefore, 'записи не перезаписаны');
+  await pm.unlock(MASTER);
+  assert.equal(pm.reveal(e.id), 'Core-Pass-0001', 'старый мастер-пароль по-прежнему открывает записи');
+
+  // экспорт во время блокировки — ошибка, а не пустой файл
+  const exp = pm.exportNadpass('Export-Pass-123');
+  pm.lock('screen');
+  await assert.rejects(exp, /заблокирован/);
+  await pm.unlock(MASTER);
+  const csv = pm.exportCsv(MASTER);
+  pm.lock('screen');
+  await assert.rejects(csv, /заблокирован/);
+
+  // расшифровка импорта во время блокировки — понятная ошибка
+  await pm.unlock(MASTER);
+  const out = await pm.exportNadpass('Export-Pass-123');
+  writeFileSync(join(dir, 'p.nadpass'), out.content);
+  const prev = pm.importOpen(join(dir, 'p.nadpass'));
+  const dec = pm.importDecrypt(prev.token, 'Export-Pass-123');
+  pm.lock('idle');
+  await assert.rejects(dec, /заблокирован|откройте файл заново/);
+
+  // разблокировка, во время которой заблокировали экран, не открывает менеджер
+  const un = pm.unlock(MASTER);
+  pm.lock('screen');
+  await assert.rejects(un, /прервана/);
+  assert.equal(pm.isUnlocked(), false);
+  // двойной вызов разблокировки — один ключ, без ошибок
+  const [a, b] = await Promise.all([pm.unlock(MASTER), pm.unlock(MASTER)]);
+  assert.ok(a.unlocked && b.unlocked);
+  assert.equal(pm.reveal(e.id), 'Core-Pass-0001');
+});
+
+test('менеджер паролей: CSV из русского Excel (Windows-1251) импортируется без искажений', async () => {
+  const dir = tmpDir();
+  const { pm } = await store();
+  await pm.setup(MASTER);
+  // Кодирование в Windows-1251 вручную: А–я → 0xC0–0xFF, Ё → 0xA8, ё → 0xB8
+  const cp1251 = (s: string) => Buffer.from([...s].map((ch) => {
+    const c = ch.codePointAt(0)!;
+    if (c < 0x80) return c;
+    if (c >= 0x410 && c <= 0x44f) return c - 0x410 + 0xc0;
+    if (c === 0x401) return 0xa8;
+    if (c === 0x451) return 0xb8;
+    throw new Error('нет в cp1251: ' + ch);
+  }));
+  writeFileSync(join(dir, 'excel.csv'), cp1251('Название;Логин;Пароль;Адрес;Заметки;Папка\r\nКоммутатор ёлка;админ;пароль-1;192.0.2.9;Стойка 3;Сеть\r\n'));
+  const p = pm.importOpen(join(dir, 'excel.csv'));
+  assert.equal(p.rows[0].title, 'Коммутатор ёлка');
+  assert.equal(p.rows[0].username, 'админ');
+  assert.equal(p.rows[0].group, 'Сеть');
+  pm.importCommit(p.token, { indexes: [0], groupMode: 'file', targetGroupId: null });
+  const e = pm.list().entries[0];
+  assert.equal(pm.reveal(e.id), 'пароль-1');
+});
