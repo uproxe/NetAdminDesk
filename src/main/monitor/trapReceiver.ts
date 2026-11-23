@@ -67,6 +67,15 @@ export class TrapReceiver {
   }
 
   private handle(msg: Buffer, rinfo: dgram.RemoteInfo): void {
+    // Пакет приходит из сети: любая ошибка разбора или обработки не должна ронять main-процесс.
+    try {
+      this.process(msg, rinfo);
+    } catch {
+      this.dropped++;
+    }
+  }
+
+  private process(msg: Buffer, rinfo: dgram.RemoteInfo): void {
     let m;
     try {
       m = decodeMessage(msg);

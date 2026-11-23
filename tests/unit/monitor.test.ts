@@ -359,3 +359,42 @@ test('почта: STARTTLS с самоподписанным сертифика�
     srv.close();
   }
 });
+
+test('мониторинг: community читается после разблокировки хранилища (режим мастер-пароля)', async () => {
+  const db = await freshDb();
+  const vault = new Vault(db, null);
+  vault.setupMaster('master-pass-42');
+  const snmp = new StubSnmp();
+  snmp.table['10.10.1.21:public'] = { [OID.sysUpTime]: { type: 'ticks', value: 500 }, [OID.sysName]: str('SW-21'), [OID.sysDescr]: str('Cisco IOS') };
+  const eng = new MonitorEngine(db, vault, () => undefined, {
+    ping: async () => ({ ok: true, ms: 1, text: 'отвечает на ping' }),
+    tcp: async () => ({ ok: false, ms: 0, text: '' }),
+    snmp,
+    mail: async () => undefined,
+    tickMs: 3600000
+  });
+  const sw = db.saveMonitorNode(node({ name: 'SW-21', host: '10.10.1.21', method: 'snmp' }));
+  vault.storeApp(communityKey(sw.id), 'public');
+  vault.lock();
+  await eng.start();
+  try {
+  await eng.checkNow(sw.id);
+  let st = eng.listStates().find((s) => s.nodeId === sw.id)!;
+  assert.equal(st.status, 'warn', 'хранилище заблокировано — только ping');
+  assert.match(st.message, /хранилище паролей заблокировано/);
+  // после разблокировки community читается без перезапуска программы
+  vault.unlock('master-pass-42');
+  eng.secretsChanged();
+  await eng.checkNow(sw.id);
+  st = eng.listStates().find((s) => s.nodeId === sw.id)!;
+  assert.equal(st.status, 'up');
+  assert.equal(st.sysName, 'SW-21');
+  // после блокировки кэш сброшен — community снова недоступна
+  vault.lock();
+  eng.secretsChanged();
+  await eng.checkNow(sw.id);
+  assert.equal(eng.listStates().find((s) => s.nodeId === sw.id)!.status, 'warn');
+  } finally {
+    eng.stop();
+  }
+});

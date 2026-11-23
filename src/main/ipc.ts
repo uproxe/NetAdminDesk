@@ -326,14 +326,27 @@ export function registerIpc(ctx: IpcContext, bridge: RendererPromptBridge): void
       setupMaster: (pw: string) => {
         vault.setupMaster(pw);
         db.flush();
+        ctx.monitor.secretsChanged();
         return vault.status();
       },
-      unlock: (pw: string) => vault.unlock(pw),
-      lock: () => vault.lock(),
-      changeMaster: (o: string, n: string) => vault.changeMaster(o, n),
+      unlock: (pw: string) => {
+        const r = vault.unlock(pw);
+        ctx.monitor.secretsChanged();
+        return r;
+      },
+      lock: () => {
+        vault.lock();
+        ctx.monitor.secretsChanged();
+      },
+      changeMaster: (o: string, n: string) => {
+        const r = vault.changeMaster(o, n);
+        ctx.monitor.secretsChanged();
+        return r;
+      },
       switchMode: (m: 'os' | 'prompt') => {
         vault.switchMode(m);
         db.flush();
+        ctx.monitor.secretsChanged();
         return vault.status();
       }
     },

@@ -226,14 +226,22 @@ export class MonitorEngine {
 
   private community(n: MonitorNode): string | null {
     if (this.communities.has(n.id)) return this.communities.get(n.id)!;
-    let c: string | null = null;
+    let c: string | null;
     try {
       c = this.vault.readApp(communityKey(n.id)) ?? null;
     } catch {
-      c = null;
+      // Хранилище заблокировано (режим мастер-пароля) — не запоминаем неудачу:
+      // после разблокировки community прочитается при следующей проверке.
+      return null;
     }
     this.communities.set(n.id, c);
     return c;
+  }
+
+  /** Сбросить кэш community: вызывается после разблокировки, блокировки и смены режима хранилища. */
+  secretsChanged(): void {
+    this.communities.clear();
+    void this.applySettings();
   }
 
   private trapCommunity(): string | undefined {
