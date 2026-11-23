@@ -113,7 +113,7 @@ test('проект обезличен: нет адресов, имён и наз
 
 test('руководства: платформы блоков кода известны, у таблиц одинаковое число столбцов', () => {
   for (const g of GUIDES) {
-    for (const m of g.body.matchAll(/^```(\S*)/gm)) if (m[1]) assert.ok(PLATFORMS.some((p) => p.id === m[1]), `${g.id}: платформа ${m[1]}`);
+    for (const m of g.body.matchAll(/^```(\S*)/gm)) if (m[1] && m[1] !== 'text') assert.ok(PLATFORMS.some((p) => p.id === m[1]), `${g.id}: платформа ${m[1]}`);
     const tables = g.body.split(/\n(?!\|)/).map((b) => b.split('\n').filter((l) => l.startsWith('|'))).filter((t) => t.length);
     for (const t of tables) {
       const n = splitRow(t[0]).length;
@@ -124,12 +124,14 @@ test('руководства: платформы блоков кода изве�
   assert.ok(GUIDES.filter((g) => g.section === 'db').length >= 8);
 });
 
-test('UserGate: справочник, сценарии и профиль диагностики', () => {
+test('UserGate: справочник, руководства, сценарии и профиль диагностики', () => {
   const ug = BUILTIN_COMMANDS.filter((c) => c.platform === 'usergate');
   assert.ok(ug.length >= 60, `команд UserGate ${ug.length}`);
   // записи по документации, на оборудовании не проверены — все помечены «Требует проверки»
   assert.ok(ug.every((c) => c.needsReview && !c.verified));
   assert.ok(ug.filter((c) => c.risk === 'info').length >= 40);
+  assert.ok(GUIDES.filter((g) => g.section === 'usergate').length >= 5);
+  assert.ok(GUIDES.filter((g) => g.section === 'monitoring').length >= 4);
   const sc = BUILTIN_SCENARIOS.filter((s) => s.platforms.includes('usergate'));
   assert.ok(sc.length >= 8);
   const profiles = builtinProfiles().filter((p) => p.platform === 'usergate');

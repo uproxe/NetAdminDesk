@@ -226,6 +226,20 @@ function GuideLink({ id, label }: { id: string; label?: string }) {
 
 function CodeBlock({ platform, code, title }: { platform: string; code: string; title: string }) {
   const app = useApp();
+  // ```text — пример вывода или команда для другой программы (PowerShell, ssh): только копирование
+  if (platform === 'text')
+    return (
+      <div className="guide-code">
+        <div className="guide-code-bar">
+          <Icon name="file" size={13} />
+          <span className="small muted grow">Пример (выполняется не на устройстве)</span>
+          <Button size="sm" variant="ghost" icon="copy" onClick={() => void app.copy(code)}>
+            Копировать
+          </Button>
+        </div>
+        <pre className="mono">{code}</pre>
+      </div>
+    );
   const kind: 'switch' | 'linux' | 'sql' = platform === 'linux' ? 'linux' : ['sql', 'mysql', 'postgresql'].includes(platform) ? 'sql' : 'switch';
   const p = getPlatform(platform);
   const run = () =>
@@ -235,7 +249,7 @@ function CodeBlock({ platform, code, title }: { platform: string; code: string; 
       template: /\{\{[A-Z_]+/.test(code) ? code : null,
       kind,
       platform: p.id,
-      risk: classifyCommand(code, kind).level,
+      risk: classifyCommand(code, kind, p.id).level,
       source: 'reference'
     });
   return (

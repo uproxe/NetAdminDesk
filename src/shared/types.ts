@@ -337,7 +337,7 @@ export interface AppInfo {
 /** Встроенное руководство (раздел «Обучение»). */
 export interface Guide {
   id: string;
-  section: 'start' | 'network' | 'switch' | 'linux' | 'db' | 'troubleshoot' | 'glossary';
+  section: 'start' | 'network' | 'switch' | 'monitoring' | 'usergate' | 'linux' | 'db' | 'troubleshoot' | 'glossary';
   level: 'новичок' | 'базовый' | 'опытный';
   title: string;
   summary: string;
