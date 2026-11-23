@@ -9,6 +9,7 @@ import { getPlatform } from '../../shared/platforms';
 import { BUILTIN_PARAMS } from '../../shared/templates';
 import type { ImportReportRecord, KnownHost, TemplateParamDef, TxtParseReport } from '../../shared/types';
 import type { EncryptedPreview, JsonPreview, TxtPreview } from '../../shared/ipc';
+import { Logo } from '../components/Logo';
 
 type Tab = 'appearance' | 'terminal' | 'security' | 'io' | 'database' | 'templates' | 'about';
 
@@ -907,7 +908,10 @@ function About() {
   );
   return (
     <div className="card">
-      <h3>NetAdmin Desk {i?.version}</h3>
+      <div className="about-head">
+        <Logo size={56} />
+        <h3>NetAdmin Desk {i?.version}</h3>
+      </div>
       <dl className="kv">
         {row('Платформа', `${i?.platform} ${i?.arch}`)}
         {row('Electron', i?.electron)}

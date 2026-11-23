@@ -103,10 +103,13 @@ function copyStatic() {
   if (!preview) {
     // Исходные TXT пользователя поставляются вместе с приложением для первичного импорта.
     cpSync(join(root, 'data/user'), join(outRoot, 'data/user'), { recursive: true });
-    if (existsSync(join(root, 'build/icon.png'))) {
-      cpSync(join(root, 'build/icon.png'), join(outRoot, 'renderer/icon.png'));
+    // Иконка окна и значки области уведомлений (см. scripts/make-icons.py)
+    for (const f of ['icon.png', 'tray.png', 'tray@2x.png', 'trayTemplate.png', 'trayTemplate@2x.png']) {
+      if (existsSync(join(root, 'build', f))) cpSync(join(root, 'build', f), join(outRoot, 'renderer', f));
     }
   }
+  // Логотип для вкладки браузера в режиме просмотра
+  cpSync(join(root, 'build/logo.svg'), join(outRoot, 'renderer/logo.svg'));
 }
 
 if (watch) {

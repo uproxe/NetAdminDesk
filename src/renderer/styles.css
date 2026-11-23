@@ -168,16 +168,22 @@ pre,
 }
 
 .brand-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
+  display: block;
   flex-shrink: 0;
+  border-radius: 6px;
+  /* тёмная подложка знака не сливается с тёмной боковой панелью */
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.18);
+}
+
+.about-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.about-head h3 {
+  margin: 0;
 }
 
 .nav {

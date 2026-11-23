@@ -2,4 +2,5 @@
 # Исходные TXT пользователя хранятся побайтно как есть (кодировка и окончания строк не меняются).
 data/user/*.txt -text
 *.png binary
+*.ico binary
 *.wasm binary

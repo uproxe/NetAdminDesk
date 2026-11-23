@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- подложка (убери для прозрачной иконки) -->
+  <rect width="256" height="256" rx="56" fill="#0B1220"/>
+
+  <g stroke="#38BDF8" stroke-width="14"
+     fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- шеврон = связи между узлами -->
+    <path d="M 80 84 L 144 128 L 80 172"/>
+    <!-- курсор -->
+    <path d="M 162 172 H 192"/>
+  </g>
+
+  <!-- узлы -->
+  <g fill="#38BDF8">
+    <circle cx="80"  cy="84"  r="15"/>
+    <circle cx="144" cy="128" r="15"/>
+    <circle cx="80"  cy="172" r="15"/>
+  </g>
+</svg>

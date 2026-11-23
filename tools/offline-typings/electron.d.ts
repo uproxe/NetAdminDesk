@@ -22,6 +22,8 @@ declare module 'electron' {
   export interface NativeImage {
     resize(o: { width?: number; height?: number }): NativeImage;
     isEmpty(): boolean;
+    setTemplateImage(option: boolean): void;
+    getSize(): { width: number; height: number };
   }
   export const nativeImage: { createFromPath(p: string): NativeImage; createEmpty(): NativeImage };
   export const powerMonitor: EventEmitter;

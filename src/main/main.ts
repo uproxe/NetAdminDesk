@@ -1,5 +1,5 @@
 // Точка входа main-процесса NetAdmin Desk.
-import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, Notification, powerMonitor, safeStorage, session, shell, Tray, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, Notification, powerMonitor, safeStorage, session, shell, Tray, type MenuItemConstructorOptions, type NativeImage } from 'electron';
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openDriver } from './db/driver';
@@ -259,12 +259,27 @@ function trayMenu(): void {
 
 function ensureTray(): void {
   if (tray && !tray.isDestroyed()) return trayMenu();
-  const iconPath = join(__dirname, '../renderer/icon.png');
-  const img = existsSync(iconPath) ? nativeImage.createFromPath(iconPath).resize({ width: process.platform === 'darwin' ? 18 : 16 }) : nativeImage.createEmpty();
-  tray = new Tray(img);
+  tray = new Tray(trayImage());
   tray.on('click', () => showWindow());
   tray.on('double-click', () => showWindow());
   trayMenu();
+}
+
+/**
+ * Значок в области уведомлений. Рядом лежит вариант @2x — Electron сам берёт его на
+ * экранах высокой плотности. В строке меню macOS — силуэт-шаблон: цвет подставит система.
+ */
+function trayImage(): NativeImage {
+  const dir = join(__dirname, '../renderer');
+  const mac = process.platform === 'darwin';
+  const file = join(dir, mac ? 'trayTemplate.png' : 'tray.png');
+  if (existsSync(file)) {
+    const img = nativeImage.createFromPath(file);
+    if (mac) img.setTemplateImage(true);
+    if (!img.isEmpty()) return img;
+  }
+  const icon = join(dir, 'icon.png');
+  return existsSync(icon) ? nativeImage.createFromPath(icon).resize({ width: mac ? 18 : 16 }) : nativeImage.createEmpty();
 }
 
 /** Автозапуск при входе в систему (скрыто, в область уведомлений) — по настройке мониторинга. */
@@ -362,6 +377,9 @@ async function runSmokeTest(vault: Vault, seedReports: number): Promise<void> {
     const pmBack = openSealed(pmKey, seal(pmKey, 'nad-smoke', 'nad-pm:smoke'), 'nad-pm:smoke').toString('utf8');
     check('passwordManagerCrypto', pmKey.length === 32 && pmBack === 'nad-smoke', { scryptMs: Date.now() - pmStart });
     check('dbDriver', true, db!.driver.name);
+    // Логотип: иконка окна и значок области уведомлений попали в пакет и читаются
+    const tray = trayImage();
+    check('appIcons', existsSync(join(__dirname, '../renderer/icon.png')) && !tray.isEmpty(), tray.getSize());
     // Небольшая пауза, чтобы ошибки отрисовки успели попасть в журнал.
     await new Promise((r) => setTimeout(r, 1500));
     check('rendererNoErrors', rendererErrors.length === 0, rendererErrors);

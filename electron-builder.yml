@@ -23,7 +23,8 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: build/icon.png
+  # Свой .ico: в мелких размерах (16–32 px) линии знака утолщены, см. scripts/make-icons.py
+  icon: build/icon.ico
   # Подписи нет: при запуске Windows SmartScreen покажет предупреждение.
   artifactName: NetAdminDesk-Windows-x64-Setup.${ext}
 nsis:
@@ -43,7 +44,8 @@ mac:
     - target: dmg
       arch: [universal]
   category: public.app-category.utilities
-  icon: build/icon.png
+  # С полями по сетке значков macOS, иначе значок в Dock крупнее соседних
+  icon: build/icon-mac.png
   # Сертификата Apple Developer нет: подпись ad-hoc выполняется в build/afterSign.js,
   # нотаризации нет — Gatekeeper покажет предупреждение (см. docs/BUILD.md).
   identity: null

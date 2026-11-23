@@ -1,3 +1,5 @@
+<p align="center"><img src="build/logo.svg" width="112" alt="Логотип NetAdmin Desk"></p>
+
 # NetAdmin Desk
 
 [![Сборка](https://github.com/uproxe/NetAdminDesk/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/uproxe/NetAdminDesk/actions/workflows/build.yml)

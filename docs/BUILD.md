@@ -60,6 +60,24 @@ npm run dist:linux   # на Linux   → release/netadmindesk-linux-amd64.deb
 
 Настройки — в `electron-builder.yml`. Имена файлов заданы через `artifactName`.
 
+### Иконки
+
+Исходник логотипа — `build/logo.svg`. Все иконки получаются из него скриптом и лежат в репозитории, поэтому для обычной сборки ничего запускать не нужно; после изменения логотипа:
+
+```bash
+python3 scripts/make-icons.py   # нужны rsvg-convert (librsvg) и Pillow
+```
+
+| Файл | Где используется |
+|---|---|
+| `build/icon.png` (1024 px) | Linux (.deb), значок окна |
+| `build/icon-mac.png` (1024 px, с полями) | macOS — поля по сетке значков, иначе значок в Dock крупнее соседних |
+| `build/icon.ico` (16–256 px) | Windows; в размерах до 32 px линии знака толще |
+| `build/tray.png`, `tray@2x.png` | область уведомлений Windows и Linux |
+| `build/trayTemplate.png`, `@2x` | строка меню macOS (силуэт, цвет подставляет система) |
+
+Знак в интерфейсе (боковая панель, «О программе») — компонент `src/renderer/components/Logo.tsx` с той же геометрией.
+
 ## CI/CD (GitHub Actions)
 
 `.github/workflows/build.yml`:

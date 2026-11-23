@@ -7,6 +7,7 @@ import { useMonitor } from '../lib/monitor';
 import { MOD } from '../api';
 import { Button, Modal, PopupMenu, type MenuEntry } from './ui';
 import { NAV, NAV_GROUPS, hiddenNavCount, isNavShown, type NavItem } from '../lib/navigation';
+import { Logo } from './Logo';
 
 export function Sidebar({ onToggleCollapse }: { onToggleCollapse: () => void }) {
   const app = useApp();
@@ -89,7 +90,7 @@ export function Sidebar({ onToggleCollapse }: { onToggleCollapse: () => void }) 
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark">NA</div>
+        <Logo size={26} className="brand-mark" />
         <span>NetAdmin Desk</span>
       </div>
       <nav className="nav">
