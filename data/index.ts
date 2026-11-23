@@ -11,6 +11,7 @@ import { SWITCH_BUILTIN } from './switch/builtin';
 import { LINUX_BASICS } from './linux/basics';
 import { LINUX_ADMIN } from './linux/admin';
 import { SWITCH_BASICS } from './switch/basics';
+import { USERGATE_COMMANDS } from './switch/usergate';
 import { SQL_COMMANDS, SQL_MOVED, moveToSql } from './sql';
 
 import { BUILTIN_SCENARIOS as BASE_SCENARIOS } from './scenarios';
@@ -23,7 +24,7 @@ export { GUIDES, GUIDE_SECTIONS } from './guides/index';
 export { builtinProfiles, SWITCH_TASKS, MAC_TABLE_DUMP, NEIGHBOR_COMMANDS } from './profiles';
 
 /** Версия встроенных данных: при увеличении встроенные записи обновляются (кроме изменённых пользователем). */
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 4;
 
 const LINUX_ALL: CommandInput[] = [
   ...LINUX_BASICS,
@@ -43,7 +44,7 @@ export const LINUX_BUILTIN: CommandInput[] = LINUX_ALL.filter((c) => !SQL_MOVED[
 /** Раздел «Базы данных (SQL)»: MySQL, MariaDB, PostgreSQL. */
 export const SQL_BUILTIN: CommandInput[] = [...SQL_COMMANDS, ...LINUX_ALL.filter((c) => SQL_MOVED[c.uid]).map(moveToSql)];
 
-export const BUILTIN_COMMANDS: CommandInput[] = [...LINUX_BUILTIN, ...SWITCH_BUILTIN, ...SWITCH_BASICS, ...SQL_BUILTIN];
+export const BUILTIN_COMMANDS: CommandInput[] = [...LINUX_BUILTIN, ...SWITCH_BUILTIN, ...SWITCH_BASICS, ...USERGATE_COMMANDS, ...SQL_BUILTIN];
 
 export interface SeedFile {
   key: string;

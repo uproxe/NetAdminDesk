@@ -51,7 +51,7 @@ export function S(d: SDef): CommandInput {
       docs: d.docs
     },
     template: d.tpl ?? null,
-    risk: d.risk ?? classifyCommand(d.cmd, 'switch').level,
+    risk: d.risk ?? classifyCommand(d.cmd, 'switch', d.p).level,
     riskManual: false,
     mode: d.mode ?? (config ? 'config' : 'exec'),
     source: 'builtin',

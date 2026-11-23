@@ -38,6 +38,13 @@ export const SWITCH_CATEGORIES: CategoryInfo[] = [
   ['security', 'Безопасность'],
   ['reboot', 'Перезагрузка'],
   ['management', 'Управление: IP, имя, доступ'],
+  ['zones', 'Зоны и доступ к управлению'],
+  ['firewall', 'Правила межсетевого экрана и NAT'],
+  ['traffic', 'Трафик, соединения, захват пакетов'],
+  ['net-diag', 'Ping, traceroute, DNS, проверка сайта'],
+  ['dns', 'DNS'],
+  ['cluster', 'Кластер и отказоустойчивость'],
+  ['snmp', 'SNMP и мониторинг'],
   ['other', 'Прочее']
 ].map(([id, name]) => ({ id, name, kind: 'switch' as const }));
 

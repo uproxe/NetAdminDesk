@@ -243,6 +243,7 @@ export function App() {
           {(app.section === 'switches' || app.section === 'reference') && <ReferenceView preset="switch" />}
           {app.section === 'linux' && <ReferenceView preset="linux" />}
           {app.section === 'sql' && <ReferenceView preset="sql" />}
+          {app.section === 'usergate' && <ReferenceView preset="usergate" />}
           {app.section === 'monitor' && <MonitorView />}
           {app.section === 'learn' && <LearnView />}
           {app.section === 'notes' && (

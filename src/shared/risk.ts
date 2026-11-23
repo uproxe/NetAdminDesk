@@ -69,6 +69,37 @@ const SWITCH_RULES: RiskRule[] = [
   [/^no\s/, 'change', 'удаление/отмена настройки']
 ];
 
+// ---------- UserGate NGFW 7.x ----------
+// Проверяются раньше общих правил коммутаторов. CLI: режим диагностики (Admin@узел>) и режим
+// конфигурации (Admin@узел#, команды show / set / create / delete / edit / execute).
+const USERGATE_RULES: RiskRule[] = [
+  [/^(execute\s+)?shutdown\b/, 'critical', 'выключение межсетевого экрана: сеть за ним останется без связи, включить можно только на месте'],
+  [/^(execute\s+)?update\s+software/, 'critical', 'обновление программного обеспечения'],
+  [/^delete\b.*\sall\s*$/, 'critical', 'удаление всех правил или объектов уровня'],
+  [/^(execute\s+)?reboot\b/, 'danger', 'перезагрузка межсетевого экрана: связь через него прервётся'],
+  [/^(execute\s+)?firewall\s+force-changes\b/, 'danger', 'переприменение правил с разрывом текущих соединений'],
+  [/^(execute\s+)?(mc-force-disconnect|restore-mac)\b/, 'danger', 'отключение от центра управления / сброс MAC интерфейса'],
+  [/^(show|top|end|exit|quit|help)\b|^\?$/, 'info', 'просмотр'],
+  [/^(execute\s+)?(ping|traceroute|dig|netcheck|check-geoip|date)\b/, 'info', 'сетевая диагностика'],
+  [/^clear\s+network\s+bgp\b.*\bsoft\b/, 'change', 'мягкое обновление маршрутов BGP без разрыва сессии'],
+  [/^clear\s+network\s+(bgp|ospf)\b/, 'danger', 'сброс динамической маршрутизации: маршруты могут временно пропасть'],
+  [/^clear\s+network\s+interface-mapping\b|^delete\s+network\s+interface-mapping\b/, 'danger', 'сброс привязки портов (применяется после перезагрузки)'],
+  [/^clear\s+(network\s+arp|blocked-ip|system\s+sessions)\b/, 'change', 'очистка таблицы: ARP, заблокированные адреса или статистика сессий'],
+  [/^delete\s+network\s+(zone|interface|virtual-router|gateway)\b|^delete\s+settings\s+device-mgmt\s+(ha-cluster|configuration-cluster)\b/, 'danger', 'удаление сетевого объекта или узла кластера — возможна потеря связи и управления'],
+  [/^delete\s+network\s+trace-rules\b/, 'change', 'удаление правила трассировки'],
+  [/^delete\s+network-policy\b/, 'danger', 'удаление правила межсетевого экрана/NAT'],
+  [/^delete\b/, 'danger', 'удаление'],
+  [/^(set|create)\s+network\s+zone\b/, 'danger', 'изменение зоны: можно закрыть доступ к веб-консоли и CLI'],
+  [/^(set|create)\s+network\s+interface\b/, 'danger', 'изменение сетевого интерфейса — возможна потеря управления'],
+  [/^(set|create)\s+network\s+(gateway|virtual-router)\b/, 'danger', 'изменение шлюзов или маршрутов'],
+  [/^(set|create)\s+network-policy\s+(firewall|nat-routing)\b/, 'danger', 'изменение правил межсетевого экрана/NAT — доступ может закрыться или открыться'],
+  [/^(set|create)\s+settings\s+device-mgmt\s+(ha-cluster|configuration-cluster)\b|^set\s+settings\s+change-control\b/, 'danger', 'изменение кластера или контроля целостности'],
+  [/^(execute\s+)?import\b/, 'danger', 'импорт конфигурации поверх текущей'],
+  [/^configure\s*$/, 'info', 'вход в режим конфигурации (сам по себе ничего не меняет)'],
+  [/^edit\b/, 'info', 'переход к уровню конфигурации'],
+  [/^(set|create|export|debug|execute)\b/, 'change', 'изменение конфигурации']
+];
+
 // ---------- Linux ----------
 // Команда разбивается на сегменты (конвейер, ;, &&, ||, подстановки) с учётом кавычек,
 // у каждого сегмента определяется исполняемая команда и её аргументы.
@@ -546,6 +577,7 @@ function stripPrompt(line: string): string {
   return line
     .replace(/^\s*(SecOff|Manager|Operator|User)\s+[^>]*>\s*/i, '')
     .replace(/^\s*[A-Za-z0-9_.\-]*\([\w\-]+\)#?\s*/, '')
+    .replace(/^\s*(\[[^\]]*\]\s*)?[A-Za-z0-9_.\-]+@[A-Za-z0-9_.\-]+[#>]\s*/, '')
     .replace(/^\s*[A-Za-z0-9_.\-]+[#>]\s+/, '')
     .replace(/^\s*#\s*/, '')
     .trim();
@@ -619,11 +651,12 @@ function classifySqlLine(line: string): RiskResult {
   return { level, reasons };
 }
 
-export function classifyLine(line: string, kind: 'switch' | 'linux' | 'sql'): RiskResult {
+export function classifyLine(line: string, kind: 'switch' | 'linux' | 'sql', platform?: string): RiskResult {
   if (kind === 'sql') return classifySqlLine(line);
   if (kind === 'switch') {
     const l = stripPrompt(line).toLowerCase();
     if (!l) return { level: 'info', reasons: [] };
+    if (platform === 'usergate') for (const [re, level, reason] of USERGATE_RULES) if (re.test(l)) return { level, reasons: [reason] };
     for (const [re, level, reason] of SWITCH_RULES) {
       if (re.test(l)) return { level, reasons: [reason] };
     }
@@ -664,14 +697,19 @@ function classifySqlCommand(command: string): RiskResult {
   return { level, reasons: level === 'info' ? reasons.slice(0, 1) : reasons };
 }
 
-export function classifyCommand(command: string, kind: 'switch' | 'linux' | 'sql'): RiskResult {
+/**
+ * Классификация команды; platform уточняет правила (сейчас — для UserGate NGFW).
+ * Многострочное правило UPL (строки, оканчивающиеся на «\») оценивается как одна команда.
+ */
+export function classifyCommand(command: string, kind: 'switch' | 'linux' | 'sql', platform?: string): RiskResult {
   if (kind === 'sql') return classifySqlCommand(command);
-  const lines = command.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  const text = platform === 'usergate' ? command.replace(/\\[ \t]*\r?\n[ \t]*(\.\.\.)?/g, ' ') : command;
+  const lines = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   let level: RiskLevel = 'info';
   const reasons: string[] = [];
   for (const line of lines) {
     // Конвейеры и последовательности в Linux анализируем целиком (правила учитывают контекст).
-    const r = classifyLine(line, kind);
+    const r = classifyLine(line, kind, platform);
     level = maxRisk(level, r.level);
     for (const reason of r.reasons) if (!reasons.includes(reason)) reasons.push(reason);
   }

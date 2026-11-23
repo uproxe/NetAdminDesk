@@ -80,11 +80,11 @@ export function ExecuteDialog({ spec, onClose }: { spec: ExecSpec; onClose: () =
   useEffect(() => setEdited(null), [rendered.text]);
   const finalCommand = edited ?? rendered.text;
   const risk = useMemo(() => {
-    const auto = classifyCommand(finalCommand, spec.kind);
+    const auto = classifyCommand(finalCommand, spec.kind, devicePlatform ?? spec.platform);
     // Уровень риска записи (возможно, изменённый пользователем) не может быть ниже автоматического
     const order = ['info', 'change', 'danger', 'critical'];
     return order.indexOf(spec.risk) >= order.indexOf(auto.level) ? { level: spec.risk, reasons: auto.reasons } : auto;
-  }, [finalCommand, spec.kind, spec.risk]);
+  }, [finalCommand, spec.kind, spec.risk, devicePlatform, spec.platform]);
   const lines = finalCommand.split('\n').filter((l) => l.trim());
   const multi = lines.length > 1;
   const readOnly = app.settings.readOnlyMode || !!deviceForTarget?.readOnly;

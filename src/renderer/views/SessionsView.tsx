@@ -575,8 +575,7 @@ function CommandWindow({ active, panes, onClose }: { active: OpenSession; panes:
 
   const ready = app.sessions.filter((x) => x.status === 'ready' && !x.pending);
   const targets = target === 'current' ? [active] : target === 'split' ? ready.filter((x) => panes.includes(x.key)) : ready;
-  const kinds = [...new Set(targets.map((t) => (t.platform === 'linux' ? 'linux' : 'switch')))] as ('linux' | 'switch')[];
-  const risk: RiskLevel = text.trim() ? kinds.reduce<RiskLevel>((r, k) => maxRisk(r, classifyCommand(text, k).level), 'info') : 'info';
+  const risk: RiskLevel = text.trim() ? targets.reduce<RiskLevel>((r, t) => maxRisk(r, classifyCommand(text, t.platform === 'linux' ? 'linux' : 'switch', t.platform).level), 'info') : 'info';
 
   // Подсказки из справочника по текущей строке
   const caret = ta.current?.selectionStart ?? text.length;

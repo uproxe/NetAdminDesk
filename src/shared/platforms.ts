@@ -20,6 +20,12 @@ export interface PlatformInfo {
   /** Поддерживает ли устройство обычно SSH exec (true только для Linux). */
   execSupported: boolean;
   notes: string;
+  /** Порт SSH по умолчанию, если не 22. */
+  sshPort?: number;
+  /** Имя пользователя по умолчанию (подсказка в карточке устройства). */
+  defaultUser?: string;
+  /** В диагностике показывать только задачи, для которых есть профиль (не коммутатор). */
+  diagOnlyProfiled?: boolean;
 }
 
 export const UNKNOWN_PLATFORM = 'unknown-ios';
@@ -165,6 +171,22 @@ export const PLATFORMS: PlatformInfo[] = [
     notes: 'Управляемые коммутаторы TP-Link (JetStream).'
   },
   {
+    id: 'usergate',
+    name: 'UserGate NGFW 7.x',
+    vendor: 'UserGate',
+    kind: 'switch',
+    pagerOff: [],
+    configCommandVerified: false,
+    macFormat: 'colon',
+    macFormatVerified: false,
+    execSupported: false,
+    sshPort: 2200,
+    defaultUser: 'Admin',
+    diagOnlyProfiled: true,
+    notes:
+      'Межсетевой экран UserGate NGFW 7.x. CLI по SSH на порту 2200 (доступ включается в зоне: «Контроль доступа → CLI по SSH»), пользователь Admin. После входа — режим диагностики (Admin@узел>), команда configure — режим конфигурации (Admin@узел#). В UserGate 6 и старше синтаксис CLI другой. Резервную копию настроек делают из веб-консоли или правилами экспорта — команды «показать всю конфигурацию» в справочнике нет.'
+  },
+  {
     id: 'linux',
     name: 'Linux (Debian / Ubuntu)',
     vendor: 'Linux',
@@ -262,6 +284,7 @@ export const DEVICE_TYPES: { id: string; label: string; platform: string }[] = [
   { id: 'qtech', label: 'Qtech', platform: 'qtech' },
   { id: 'osnovo', label: 'OSNOVO', platform: 'osnovo' },
   { id: 'tplink', label: 'TP-Link', platform: 'tplink' },
+  { id: 'usergate', label: 'UserGate NGFW (межсетевой экран)', platform: 'usergate' },
   { id: 'linux', label: 'Linux Server', platform: 'linux' },
   { id: 'unknown-ios', label: 'Коммутатор (IOS-подобный, производитель не указан)', platform: UNKNOWN_PLATFORM },
   { id: 'other', label: 'Другое SSH-устройство', platform: 'generic-ssh' }

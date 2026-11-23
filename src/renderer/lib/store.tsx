@@ -498,7 +498,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (id: number) => {
       const c = commands.find((x) => x.id === id);
       setSelectedCommandId(id);
-      setSectionState(c?.kind === 'linux' ? 'linux' : c?.kind === 'sql' ? 'sql' : 'switches');
+      setSectionState(c?.kind === 'linux' ? 'linux' : c?.kind === 'sql' ? 'sql' : c?.platform === 'usergate' ? 'usergate' : 'switches');
     },
     [commands]
   );

@@ -7,6 +7,7 @@ export type Section =
   | 'switches'
   | 'linux'
   | 'sql'
+  | 'usergate'
   | 'learn'
   | 'notes'
   | 'favorites'

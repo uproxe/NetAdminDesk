@@ -62,3 +62,35 @@ test('маскировка паролей SQL, в том числе в кавы�
   assert.equal(maskSecrets('PGPASSWORD=Secr3t psql -h db -U app'), 'PGPASSWORD=******** psql -h db -U app');
   assert.equal(maskSecrets('mysql -u root -pSecr3t shop'), 'mysql -u root -p******** shop');
 });
+
+test('UserGate NGFW: правила с учётом платформы', () => {
+  const U = (c: string) => classifyCommand(c, 'switch', 'usergate').level;
+  // просмотр и диагностика — в обоих режимах, с приглашением и без
+  assert.equal(U('show network route ip 8.8.8.8'), 'info');
+  assert.equal(U('Admin@ngfw1> show traffic connections dest-ip 10.0.0.5'), 'info');
+  assert.equal(U('[ network interface ] Admin@ngfw1# show'), 'info');
+  assert.equal(U('ping hostname 8.8.8.8 count 4'), 'info');
+  assert.equal(U('execute ping hostname 8.8.8.8 count 4'), 'info');
+  assert.equal(U('netcheck address https://example.com'), 'info');
+  assert.equal(U('configure'), 'info');
+  assert.equal(U('edit network interface'), 'info');
+  // изменения
+  assert.equal(U('clear blocked-ip ips [ 10.0.0.5 ]'), 'change');
+  assert.equal(U('clear network bgp ip 192.0.2.1 soft in'), 'change');
+  assert.equal(U('set network dns system-dns-servers ip [ 10.0.0.2 ]'), 'change');
+  assert.equal(U('delete network trace-rules "NAD trace"'), 'change');
+  // опасные: управление, маршрутизация, правила
+  assert.equal(U('set network zone Trusted enabled-services [ "Any ICMP" ]'), 'danger');
+  assert.equal(U('set network interface adapter port1 enabled off'), 'danger');
+  assert.equal(U('clear network bgp ip 192.0.2.1'), 'danger');
+  assert.equal(U('delete network-policy firewall 5'), 'danger');
+  assert.equal(U('execute firewall force-changes'), 'danger');
+  assert.equal(U('reboot'), 'danger');
+  // критичные
+  assert.equal(U('shutdown'), 'critical');
+  assert.equal(U('delete network-policy firewall all'), 'critical');
+  // многострочное правило UPL оценивается целиком
+  assert.equal(U('create network-policy firewall 1 upl-rule PASS \\\n...src.zone = Trusted \\\n...service = HTTPS \\\n...enabled(true)'), 'danger');
+  // для других платформ поведение прежнее: «shutdown» — отключение интерфейса
+  assert.equal(S('shutdown'), 'danger');
+});

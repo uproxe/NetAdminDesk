@@ -19,7 +19,7 @@ export function execSpecFor(c: CommandRecord, command?: string, sessionKey?: str
     template: command ? null : c.template,
     kind: c.kind,
     platform: c.platform,
-    risk: command ? classifyCommand(command, c.kind).level : c.risk,
+    risk: command ? classifyCommand(command, c.kind, c.platform).level : c.risk,
     source: 'reference',
     commandUid: c.uid,
     sessionKey
@@ -325,7 +325,7 @@ export function CommandEditor({ initial, onClose, focusTemplate }: { initial: Co
   const [c, setC] = useState<CommandInput>({ ...initial });
   const [tags, setTags] = useState((initial.tags ?? []).join(', '));
   const [busy, setBusy] = useState(false);
-  const auto = useMemo(() => classifyCommand(c.command, c.kind), [c.command, c.kind]);
+  const auto = useMemo(() => classifyCommand(c.command, c.kind, c.platform), [c.command, c.kind, c.platform]);
   const cats = categoriesFor(c.kind);
   const platforms = c.kind === 'linux' ? PLATFORMS.filter((p) => p.kind === 'linux') : c.kind === 'sql' ? PLATFORMS.filter((p) => p.kind === 'db') : PLATFORMS.filter((p) => p.kind === 'switch' || p.kind === 'other');
   const set = <K extends keyof CommandInput>(k: K, v: CommandInput[K]) => setC((x) => ({ ...x, [k]: v }));

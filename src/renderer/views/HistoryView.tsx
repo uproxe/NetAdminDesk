@@ -116,7 +116,7 @@ export function HistoryView() {
                         onClick={() => {
                           const d = app.devices.find((x) => x.id === h.deviceId);
                           const kind = d?.platform === 'linux' ? 'linux' : 'switch';
-                          app.execute({ title: 'Повтор из истории', command: h.command, kind, platform: d?.platform ?? 'generic-ssh', risk: classifyCommand(h.command, kind).level, source: 'reference' });
+                          app.execute({ title: 'Повтор из истории', command: h.command, kind, platform: d?.platform ?? 'generic-ssh', risk: classifyCommand(h.command, kind, d?.platform).level, source: 'reference' });
                         }}
                       />
                     </span>

@@ -118,7 +118,7 @@ export function DeviceEditor({ initial, onClose, onSaved }: { initial?: Device |
       ...x,
       protocol: p,
       // Стандартный порт меняется вместе с протоколом, если пользователь его не менял.
-      port: p === 'telnet' && (x.port === 22 || !x.port) ? 23 : p === 'ssh' && x.port === 23 ? 22 : x.port,
+      port: p === 'telnet' && (x.port === 22 || x.port === getPlatform(x.platform).sshPort || !x.port) ? 23 : p === 'ssh' && x.port === 23 ? getPlatform(x.platform).sshPort ?? 22 : x.port,
       authMethod: p === 'ssh' ? x.authMethod : 'password'
     }));
   const findPorts = async () => {
@@ -198,7 +198,17 @@ export function DeviceEditor({ initial, onClose, onSaved }: { initial?: Device |
                 value={d.deviceType}
                 onChange={(e) => {
                   const t = DEVICE_TYPES.find((x) => x.id === e.target.value)!;
-                  setD((x) => ({ ...x, deviceType: t.id, platform: t.platform, vendor: getPlatform(t.platform).vendor }));
+                  const p = getPlatform(t.platform);
+                  const prev = getPlatform(d.platform);
+                  setD((x) => ({
+                    ...x,
+                    deviceType: t.id,
+                    platform: t.platform,
+                    vendor: p.vendor,
+                    // Стандартный порт и пользователь платформы (UserGate: 2200, Admin), если пользователь их не менял.
+                    port: x.protocol === 'ssh' && (x.port === 22 || x.port === (prev.sshPort ?? 22)) ? p.sshPort ?? 22 : x.port,
+                    username: !x.username || x.username === prev.defaultUser ? p.defaultUser ?? '' : x.username
+                  }));
                 }}
               >
                 {DEVICE_TYPES.map((t) => (

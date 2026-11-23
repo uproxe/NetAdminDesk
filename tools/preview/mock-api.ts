@@ -257,7 +257,7 @@ const api: NadApi & { platform: string } = {
   commands: {
     list: async () => clone(commands.filter((c) => !(c as CommandRecord & { deleted?: boolean }).deleted)),
     save: async (c) => {
-      const rec = addCommand({ ...c, risk: c.riskManual ? c.risk : classifyCommand(c.command, c.kind), source: c.source || 'user' } as CommandInput);
+      const rec = addCommand({ ...c, risk: c.riskManual ? c.risk : classifyCommand(c.command, c.kind, c.platform), source: c.source || 'user' } as CommandInput);
       return clone(rec);
     },
     remove: async (id) => {

@@ -214,7 +214,7 @@ export class SessionManager extends EventEmitter {
         deviceName: device.name,
         command: maskSecrets(line),
         source: 'typed',
-        risk: classifyCommand(line, kind).level,
+        risk: classifyCommand(line, kind, device.platform).level,
         result: 'sent',
         note: uncertain ? 'введено вручную; строка могла быть изменена автодополнением или историей CLI' : 'введено вручную'
       });
@@ -295,7 +295,7 @@ export class SessionManager extends EventEmitter {
   /** Проверка режима «Только чтение» (глобального и для устройства). */
   private guard(device: Device, command: string, meta: CommandMeta): RiskLevel {
     const kind = device.platform === 'linux' ? 'linux' : 'switch';
-    const risk = meta.risk ?? classifyCommand(command, kind).level;
+    const risk = meta.risk ?? classifyCommand(command, kind, device.platform).level;
     const ro = this.db.getSettings().readOnlyMode || device.readOnly;
     if (ro && risk !== 'info') {
       this.db.addHistory({ deviceId: device.id, deviceName: device.name, command: maskSecrets(command), source: meta.source, risk, result: 'blocked', note: 'режим «Только чтение»' });

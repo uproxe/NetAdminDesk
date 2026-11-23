@@ -32,6 +32,7 @@ export const NAV: NavItem[] = [
   { id: 'switches', label: 'Коммутаторы', icon: 'switch', group: 'ref', tier: 'core', hint: 'Команды коммутаторов по производителям', keywords: 'cisco hp vlan порт справочник' },
   { id: 'linux', label: 'Linux', icon: 'linux', group: 'ref', tier: 'core', hint: 'Команды Linux от простых до админских', keywords: 'сервер debian ubuntu справочник' },
   { id: 'sql', label: 'Базы данных', icon: 'database', group: 'ref', tier: 'core', hint: 'SQL: MySQL, MariaDB, PostgreSQL — подключение, пользователи, копии, мониторинг', keywords: 'sql mysql mariadb postgresql postgres база данных бд справочник' },
+  { id: 'usergate', label: 'UserGate', icon: 'shield', group: 'ref', tier: 'core', hint: 'Межсетевой экран UserGate NGFW: CLI, сеть, правила, диагностика', keywords: 'usergate юзергейт ngfw межсетевой экран firewall утм ugos' },
   { id: 'learn', label: 'Обучение', icon: 'book', group: 'ref', tier: 'core', hint: 'Пошаговые руководства и словарь терминов', keywords: 'руководство инструкция учебник словарь' },
   { id: 'notes', label: 'Мои заметки', icon: 'note', group: 'ref', tier: 'extra', hint: 'Свои записи и шпаргалки' },
   { id: 'favorites', label: 'Избранное', icon: 'star', group: 'ref', tier: 'extra', hint: 'Отмеченные звёздочкой команды и сценарии' },
@@ -53,6 +54,7 @@ export const NAV_TITLES: Record<string, string> = {
   sql: 'Справочник SQL: MySQL, MariaDB, PostgreSQL',
   learn: 'Обучение: руководства и словарь',
   nettools: 'Сетевые утилиты',
+  usergate: 'Справочник UserGate NGFW',
   monitor: 'Мониторинг: карта сети и доступность'
 };
 

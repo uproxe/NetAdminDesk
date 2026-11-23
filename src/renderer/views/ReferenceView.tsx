@@ -11,7 +11,10 @@ import { RISK_LABELS, RISK_ORDER } from '../../shared/risk';
 import { SOURCE_LABELS, SOURCE_SHORT, fmtDate } from '../lib/format';
 import type { CommandRecord, CommandSource, Note, RiskLevel } from '../../shared/types';
 
-type Preset = 'all' | 'switch' | 'linux' | 'sql';
+type Preset = 'all' | 'switch' | 'linux' | 'sql' | 'usergate';
+
+/** Отдельный раздел меню для платформы (UserGate): команды кладутся в kind «switch», но показываются отдельно. */
+export const SEPARATE_PLATFORMS = ['usergate'];
 
 interface Filters {
   kind: 'all' | 'switch' | 'linux' | 'sql';
@@ -23,6 +26,8 @@ interface Filters {
   review: boolean;
   /** Только простые команды для начинающих (метка «основы»). */
   basic: boolean;
+  /** Раздел одной платформы (UserGate): фильтр по платформе зафиксирован. */
+  lockPlatform?: string;
 }
 
 const SOURCE_ORDER: Record<CommandRecord['source'], number> = { user_txt: 0, user: 1, imported: 2, builtin: 3 };
@@ -33,7 +38,7 @@ export function useFilteredCommands(q: string, f: Filters) {
   return useMemo(() => {
     const opts = {
       groups: f.kind === 'all' ? (['switch', 'linux', 'sql'] as const).slice() : [f.kind],
-      platform: f.platform || undefined,
+      platform: f.lockPlatform || f.platform || undefined,
       category: f.category || undefined,
       risk: f.risk || undefined,
       source: f.source || undefined,
@@ -44,6 +49,8 @@ export function useFilteredCommands(q: string, f: Filters) {
     // Без запроса ваши записи (из TXT и добавленные вручную) идут первыми, в порядке файла.
     if (!dq.trim()) hits = hits.map((c, i) => [c, i] as const).sort((a, b) => SOURCE_ORDER[a[0].source] - SOURCE_ORDER[b[0].source] || a[1] - b[1]).map((x) => x[0]);
     if (f.basic) hits = hits.filter((c) => c.tags.includes('основы'));
+    // В «Коммутаторах» не показываем платформы, у которых свой раздел (UserGate).
+    if (f.kind === 'switch' && !f.lockPlatform && !f.platform) hits = hits.filter((c) => !SEPARATE_PLATFORMS.includes(c.platform));
     return f.review ? hits.filter((c) => c.needsReview) : hits;
   }, [app.index, dq, f]);
 }
@@ -87,7 +94,7 @@ function TopTabs({ tab, setTab }: { tab: 'commands' | 'notes'; setTab: (t: 'comm
 export function ReferenceBrowser({ preset, initialId }: { preset: Preset; initialId?: number | null }) {
   const app = useApp();
   const [q, setQ] = useState('');
-  const [f, setF] = useState<Filters>({ kind: preset, platform: '', category: '', risk: '', source: '', favorites: false, review: false, basic: false });
+  const [f, setF] = useState<Filters>({ kind: preset === 'usergate' ? 'switch' : preset, lockPlatform: preset === 'usergate' ? 'usergate' : undefined, platform: '', category: '', risk: '', source: '', favorites: false, review: false, basic: false });
   const [selId, setSelId] = useState<number | null>(initialId ?? null);
   useEffect(() => {
     if (initialId) setSelId(initialId);
@@ -96,14 +103,14 @@ export function ReferenceBrowser({ preset, initialId }: { preset: Preset; initia
   const sel = app.commands.find((c) => c.id === selId) ?? null;
 
   // счётчики для фильтров (без учёта самого фильтра)
-  const base = app.commands.filter((c) => f.kind === 'all' || c.kind === f.kind);
+  const base = app.commands.filter((c) => (f.kind === 'all' || c.kind === f.kind) && (f.lockPlatform ? c.platform === f.lockPlatform : f.kind !== 'switch' || !SEPARATE_PLATFORMS.includes(c.platform)));
   const platformCounts = countBy(base, (c) => c.platform);
   const catBase = base.filter((c) => !f.platform || c.platform === f.platform);
   const catCounts = countBy(catBase, (c) => `${c.kind}:${c.category}`);
   const cats = f.kind === 'all' ? [...SWITCH_CATEGORIES, ...LINUX_CATEGORIES, ...SQL_CATEGORIES] : categoriesFor(f.kind);
   const set = (patch: Partial<Filters>) => setF((x) => ({ ...x, ...patch }));
 
-  const addNew = () => app.openDialog((close) => <CommandEditor initial={emptyCommand(f.kind === 'all' ? 'switch' : f.kind, f.platform || undefined)} onClose={close} />);
+  const addNew = () => app.openDialog((close) => <CommandEditor initial={emptyCommand(f.kind === 'all' ? 'switch' : f.kind, f.lockPlatform || f.platform || undefined)} onClose={close} />);
 
   return (
     <div className="columns">
@@ -126,7 +133,7 @@ export function ReferenceBrowser({ preset, initialId }: { preset: Preset; initia
             ))}
           </div>
         )}
-        {f.kind !== 'linux' && (
+        {f.kind !== 'linux' && !f.lockPlatform && (
           <div className="filter-group">
             <div className="filter-title">{f.kind === 'sql' ? 'СУБД' : 'Производитель / платформа'}</div>
             <button className={`filter-item ${!f.platform ? 'active' : ''}`} onClick={() => set({ platform: '', category: '' })}>
@@ -216,7 +223,38 @@ export function ReferenceBrowser({ preset, initialId }: { preset: Preset; initia
           {items.length > 600 && <div className="small faint" style={{ padding: 12 }}>Показаны первые 600 — уточните запрос.</div>}
         </div>
       </div>
-      <div className="col col-detail">{sel ? <CommandCard c={sel} /> : <Empty icon="book" title="Выберите команду">Карточка покажет синтаксис, пояснения, примеры и кнопки «Копировать» / «Выполнить на устройстве».</Empty>}</div>
+      <div className="col col-detail">
+        {sel ? (
+          <CommandCard c={sel} />
+        ) : preset === 'usergate' ? (
+          <div className="card">
+            <h3>UserGate NGFW 7.x</h3>
+            <p className="small">
+              CLI по SSH на порту 2200, пользователь Admin. После входа — режим диагностики (Admin@узел&gt;), configure — режим конфигурации (Admin@узел#). Команды взяты из документации производителя и помечены «Требует проверки»: на реальном оборудовании они в программе не проверялись.
+            </p>
+            <div className="section-title">Руководства</div>
+            <div className="mlist" style={{ alignItems: 'flex-start', gap: 6, maxHeight: 'none' }}>
+              {[
+                ['ug-start', 'Первое подключение к CLI'],
+                ['ug-diag', 'Узел за UserGate недоступен: диагностика'],
+                ['ug-rules', 'Правила межсетевого экрана и NAT'],
+                ['ug-mgmt-lost', 'Пропал доступ к веб-консоли'],
+                ['ug-snmp', 'UserGate в мониторинге (SNMP)'],
+                ['ug-cluster', 'Кластер отказоустойчивости']
+              ].map(([id, label]) => (
+                <button key={id} className="linklike" onClick={() => app.openGuide(id)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="small muted" style={{ marginTop: 10 }}>
+              Готовые проверки — в разделах «Сценарии» (фильтр по платформе UserGate) и «Диагностика».
+            </p>
+          </div>
+        ) : (
+          <Empty icon="book" title="Выберите команду">Карточка покажет синтаксис, пояснения, примеры и кнопки «Копировать» / «Выполнить на устройстве».</Empty>
+        )}
+      </div>
     </div>
   );
 }
