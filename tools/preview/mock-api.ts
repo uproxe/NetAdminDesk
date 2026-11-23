@@ -229,7 +229,7 @@ function waitPrompt(p: AnyPrompt): Promise<unknown> {
 const api: NadApi & { platform: string } = {
   platform: /Mac/.test(navigator.platform) ? 'darwin' : 'linux',
   app: {
-    info: async () => ({ version: '1.1.0-preview', platform: 'preview', arch: 'browser', dataDir: '/demo/NetAdmin Desk', dbPath: '/demo/NetAdmin Desk/netadmin.db', portable: false, electron: '—', node: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] ?? '—', schemaVersion: 1, dbDriver: 'имитация' }),
+    info: async () => ({ version: '1.2.0-preview', platform: 'preview', arch: 'browser', dataDir: '/demo/NetAdmin Desk', dbPath: '/demo/NetAdmin Desk/netadmin.db', portable: false, electron: '—', node: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] ?? '—', schemaVersion: 1, dbDriver: 'имитация' }),
     openExternal: async () => {},
     showItemInFolder: async () => {},
     openPath: async () => '',
