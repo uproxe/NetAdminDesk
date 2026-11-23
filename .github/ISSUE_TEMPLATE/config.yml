@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Сообщить об уязвимости
+    url: https://github.com/uproxe/NetAdminDesk/security/advisories/new
+    about: Закрыто, только для владельца репозитория. Не публикуйте уязвимости в issues.
+  - name: Руководство пользователя
+    url: https://github.com/uproxe/NetAdminDesk/blob/main/docs/USER_GUIDE.md
+    about: Ответы на частые вопросы по работе с программой

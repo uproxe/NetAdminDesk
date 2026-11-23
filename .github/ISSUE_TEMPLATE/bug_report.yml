@@ -1,0 +1,72 @@
+name: Сообщить об ошибке
+description: Программа работает не так, как ожидается
+title: "[Ошибка] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо, что сообщаете! Не прикладывайте реальные адреса, пароли, community и конфигурации — замените их примерами (`192.0.2.10`, `SW-ACCESS-1`).
+        Уязвимости — не сюда, а через вкладку **Security → Report a vulnerability**.
+  - type: input
+    id: version
+    attributes:
+      label: Версия программы
+      description: «Настройки → О программе»
+      placeholder: "1.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Операционная система
+      options:
+        - Windows 10 / 11
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (Debian / Ubuntu)
+        - Другая
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Раздел
+      options:
+        - Сессии (SSH, Telnet, COM-порт)
+        - Мониторинг (карта, SNMP, трапы, почта)
+        - Справочник команд
+        - Диагностика
+        - Сценарии
+        - Устройства, импорт и экспорт
+        - Резервные копии
+        - Другое
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги
+      placeholder: |
+        1. Открыть «Мониторинг»
+        2. Нажать «Добавить узел»
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Что ожидали и что получилось
+    validations:
+      required: true
+  - type: textarea
+    id: device
+    attributes:
+      label: Оборудование (если связано с устройством)
+      description: Производитель, модель, версия прошивки
+      placeholder: "Cisco Catalyst 2960, IOS 15.2(7)E"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Текст ошибки или вывод
+      render: text

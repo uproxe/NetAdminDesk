@@ -2,13 +2,21 @@
   "name": "netadmin-desk",
   "productName": "NetAdmin Desk",
   "version": "1.0.0",
-  "description": "Рабочее место системного администратора: SSH-клиент для коммутаторов и Linux-серверов, справочник команд, диагностика и сценарии",
+  "description": "Рабочее место системного администратора: SSH-клиент для коммутаторов и Linux-серверов, мониторинг сети с картой, справочник команд, диагностика и сценарии",
   "author": {
     "name": "NetAdmin Desk",
     "email": "netadmin-desk@localhost"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
+  "homepage": "https://github.com/uproxe/NetAdminDesk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uproxe/NetAdminDesk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/uproxe/NetAdminDesk/issues"
+  },
   "main": "dist/main/main.js",
   "scripts": {
     "build": "node scripts/build.mjs",

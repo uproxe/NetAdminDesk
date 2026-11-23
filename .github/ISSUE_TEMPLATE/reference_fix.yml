@@ -1,0 +1,33 @@
+name: Исправить команду в справочнике
+description: Команда в справочнике, руководстве, сценарии или диагностике неверна или не работает на вашем оборудовании
+title: "[Справочник] "
+labels: [reference]
+body:
+  - type: input
+    id: entry
+    attributes:
+      label: Запись
+      description: Название записи или команда, как она показана в программе
+      placeholder: "Соединения к адресу — show traffic connections dest-ip …"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Платформа, модель и версия прошивки
+      placeholder: "UserGate NGFW 7.1, OSNOVO SW-…, Cisco IOS 15.2"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Что выдаёт оборудование
+      description: Ошибку или вывод — без реальных адресов и имён
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: Правильный вариант
+      description: Если знаете — команда, которая работает, и источник (документация производителя, проверено на устройстве)

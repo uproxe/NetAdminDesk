@@ -1,0 +1,21 @@
+name: Предложить улучшение
+description: Новая возможность, платформа или руководство
+title: "[Идея] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую задачу нужно решить
+      description: Опишите ситуацию из работы, а не готовое решение
+      placeholder: "Хочу видеть на карте, что камера не только в сети, но и отдаёт видеопоток…"
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Как это могло бы выглядеть
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Как вы решаете это сейчас
