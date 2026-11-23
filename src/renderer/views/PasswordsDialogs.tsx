@@ -2,7 +2,8 @@
 // с предпросмотром, настройки, смена мастер-пароля, удаление хранилища.
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api';
-import { useApp, errMsg } from '../lib/store';
+import { errMsg } from '../lib/store';
+import { usePmApp } from './pmSession';
 import { Icon } from '../lib/icons';
 import { Banner, Button, Field, Modal, Toggle } from '../components/ui';
 import {
@@ -157,7 +158,7 @@ function GeneratorPanel({ onUse, useLabel = 'Использовать' }: { onUs
 }
 
 export function GeneratorDialog({ onClose }: { onClose: () => void }) {
-  const app = useApp();
+  const app = usePmApp();
   return (
     <Modal title="Генератор паролей" onClose={onClose}>
       <GeneratorPanel
@@ -174,7 +175,7 @@ export function GeneratorDialog({ onClose }: { onClose: () => void }) {
 // ---------- Редактор записи ----------
 
 export function EntryEditor({ id, groups, defaultGroupId, onClose, onSaved }: { id?: string; groups: PmGroup[]; defaultGroupId?: string | null; onClose: () => void; onSaved: (e: PmEntrySummary) => void | Promise<void> }) {
-  const app = useApp();
+  const app = usePmApp();
   const [loaded, setLoaded] = useState(!id);
   const [title, setTitle] = useState('');
   const [username, setUsername] = useState('');
@@ -315,7 +316,7 @@ export function EntryEditor({ id, groups, defaultGroupId, onClose, onSaved }: { 
 // ---------- Экспорт ----------
 
 export function ExportDialog({ count, onClose }: { count: number; onClose: () => void }) {
-  const app = useApp();
+  const app = usePmApp();
   const [format, setFormat] = useState<PmExportFormat>('nadpass');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
@@ -400,7 +401,7 @@ export function ExportDialog({ count, onClose }: { count: number; onClose: () =>
 // ---------- Импорт ----------
 
 export function ImportDialog({ groups, onClose, onDone }: { groups: PmGroup[]; onClose: () => void; onDone: () => Promise<void> }) {
-  const app = useApp();
+  const app = usePmApp();
   const [preview, setPreview] = useState<PmImportPreview | null>(null);
   const [pw, setPw] = useState('');
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -601,7 +602,7 @@ export function ImportDialog({ groups, onClose, onDone }: { groups: PmGroup[]; o
 // ---------- Настройки, смена мастер-пароля, удаление ----------
 
 export function PmSettingsDialog({ onClose, onReset }: { onClose: () => void; onReset: () => void }) {
-  const app = useApp();
+  const app = usePmApp();
   const [s, setS] = useState<PmSettings>(app.settings.passwords);
   const set = (patch: Partial<PmSettings>) => setS(withPmDefaults({ ...s, ...patch }));
   const save = async () => {
@@ -658,7 +659,7 @@ export function PmSettingsDialog({ onClose, onReset }: { onClose: () => void; on
 }
 
 export function ChangeMasterDialog({ onClose }: { onClose: () => void }) {
-  const app = useApp();
+  const app = usePmApp();
   const [cur, setCur] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
@@ -703,7 +704,7 @@ export function ChangeMasterDialog({ onClose }: { onClose: () => void }) {
 }
 
 export function ResetDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const app = useApp();
+  const app = usePmApp();
   const [word, setWord] = useState('');
   const run = async () => {
     try {

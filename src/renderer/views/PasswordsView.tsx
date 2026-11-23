@@ -2,9 +2,10 @@
 // паролем, адресом и заметками, генератор, проверка слабых и повторяющихся паролей,
 // зашифрованный экспорт и импорт. Пароли приходят в интерфейс только по «Показать» или для
 // редактирования; копирование идёт через main-процесс с очисткой буфера.
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '../api';
-import { useApp, errMsg } from '../lib/store';
+import { errMsg } from '../lib/store';
+import { closePmDialogs, pmActivity, usePmApp } from './pmSession';
 import { Icon } from '../lib/icons';
 import { askText, Banner, Button, Empty } from '../components/ui';
 import { PM_MIN_MASTER, type PmEntryDetails, type PmEntrySummary, type PmGroup, type PmStatus } from '../../shared/passwords';
@@ -23,7 +24,7 @@ const LOCK_REASONS: Record<string, string> = {
 let lastFilter: Filter = { kind: 'all' };
 
 export function PasswordsView() {
-  const app = useApp();
+  const app = usePmApp();
   const [status, setStatus] = useState<PmStatus | null>(null);
   const [data, setData] = useState<{ groups: PmGroup[]; entries: PmEntrySummary[] } | null>(null);
   const loadStatus = useCallback(async () => {
@@ -35,20 +36,22 @@ export function PasswordsView() {
   }, []);
   useEffect(() => {
     void loadStatus().catch((e) => app.toast(errMsg(e), 'error'));
-    return api.on((e) => {
+    const off = api.on((e) => {
       if (e.type === 'pm:locked') {
+        closePmDialogs();
         setData(null);
         void loadStatus();
       }
     });
+    return () => {
+      off();
+      closePmDialogs();
+    };
   }, [loadStatus]);
 
   // Активность в разделе продлевает время до автоблокировки (не чаще раза в 20 с)
-  const lastTouch = useRef(0);
   const touch = () => {
-    if (!status?.unlocked || Date.now() - lastTouch.current < 20_000) return;
-    lastTouch.current = Date.now();
-    void api.passwords.touch();
+    if (status?.unlocked) pmActivity();
   };
 
   if (!status) return <div className="page" />;
@@ -64,7 +67,7 @@ export function PasswordsView() {
 // ---------- Создание мастер-пароля ----------
 
 function SetupScreen({ onDone }: { onDone: () => Promise<unknown> }) {
-  const app = useApp();
+  const app = usePmApp();
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [ack, setAck] = useState(false);
@@ -123,7 +126,7 @@ function SetupScreen({ onDone }: { onDone: () => Promise<unknown> }) {
 // ---------- Разблокировка ----------
 
 function UnlockScreen({ status, onDone }: { status: PmStatus; onDone: () => Promise<PmStatus> }) {
-  const app = useApp();
+  const app = usePmApp();
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -179,7 +182,7 @@ function UnlockScreen({ status, onDone }: { status: PmStatus; onDone: () => Prom
 // ---------- Открытый менеджер ----------
 
 function Manager({ data, reload, onLocked }: { data: { groups: PmGroup[]; entries: PmEntrySummary[] }; reload: () => Promise<void>; onLocked: () => Promise<unknown> }) {
-  const app = useApp();
+  const app = usePmApp();
   const [filter, setFilterState] = useState<Filter>(lastFilter);
   const setFilter = (f: Filter) => {
     lastFilter = f;
@@ -372,7 +375,7 @@ function FilterItem({ label, icon, n, active, onClick, warn, dim }: { label: str
 }
 
 function GroupItem({ g, active, onClick, reload }: { g: PmGroup; active: boolean; onClick: () => void; reload: () => Promise<void> }) {
-  const app = useApp();
+  const app = usePmApp();
   const rename = async () => {
     const name = await askName(app, 'Переименовать папку', g.name);
     if (!name || name === g.name) return;
@@ -416,7 +419,7 @@ function GroupItem({ g, active, onClick, reload }: { g: PmGroup; active: boolean
 // ---------- Карточка записи ----------
 
 function EntryDetails({ summary, groups, reload, onDeleted, copyPassword }: { summary: PmEntrySummary; groups: PmGroup[]; reload: () => Promise<void>; onDeleted: () => void; copyPassword: (id: string) => Promise<void> }) {
-  const app = useApp();
+  const app = usePmApp();
   const [d, setD] = useState<PmEntryDetails | null>(null);
   const [revealed, setRevealed] = useState<string | null>(null);
   const [historyShown, setHistoryShown] = useState<Record<number, string>>({});
@@ -572,7 +575,7 @@ function FieldRow({ label, children }: { label: string; children: ReactNode }) {
 
 // ---------- Вспомогательное ----------
 
-function askName(app: ReturnType<typeof useApp>, title: string, initial: string): Promise<string | null> {
+function askName(app: ReturnType<typeof usePmApp>, title: string, initial: string): Promise<string | null> {
   return askText(app.openDialog, title, 'Название папки', initial);
 }
 
