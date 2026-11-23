@@ -64,7 +64,20 @@ const PATHS: Record<string, string> = {
   minimize: 'M8 3v5H3M21 8h-5V3M3 16h5v5M16 21v-5h5',
   maximize: 'M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5',
   type: 'M4 7V4h16v3M9 20h6M12 4v16',
-  bolt: 'M13 2 4 14h7l-1 8 9-12h-7z'
+  bolt: 'M13 2 4 14h7l-1 8 9-12h-7z',
+  router: 'M3 14h18v6H3zM7 17h.01M11 17h.01M8 10a6 6 0 0 1 8 0M5.5 7.5a9.5 9.5 0 0 1 13 0M12 14v-1',
+  video: 'M3 6h12v12H3zM15 10l6-3v10l-6-3',
+  camera: 'M4 7h3l2-3h6l2 3h3v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
+  wifi: 'M2 8.5a15 15 0 0 1 20 0M5 12a10.5 10.5 0 0 1 14 0M8.5 15.5a5.5 5.5 0 0 1 7 0M12 19h.01',
+  printer: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z',
+  monitor: 'M3 4h18v12H3zM8 20h8M12 16v4',
+  box: 'M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8',
+  map: 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14',
+  pulse: 'M3 12h3l2-5 3 10 3-12 2 7h5',
+  mail: 'M3 5h18v14H3zM3 6l9 7 9-7',
+  pause: 'M7 4h3v16H7zM14 4h3v16h-3z',
+  move: 'M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3',
+  image: 'M3 4h18v16H3zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 16l-5-5-9 9'
 };
 
 export function Icon({ name, size = 16, style, className }: { name: keyof typeof PATHS | string; size?: number; style?: CSSProperties; className?: string }) {

@@ -35,6 +35,7 @@ export const NAV: NavItem[] = [
   { id: 'learn', label: 'Обучение', icon: 'book', group: 'ref', tier: 'core', hint: 'Пошаговые руководства и словарь терминов', keywords: 'руководство инструкция учебник словарь' },
   { id: 'notes', label: 'Мои заметки', icon: 'note', group: 'ref', tier: 'extra', hint: 'Свои записи и шпаргалки' },
   { id: 'favorites', label: 'Избранное', icon: 'star', group: 'ref', tier: 'extra', hint: 'Отмеченные звёздочкой команды и сценарии' },
+  { id: 'monitor', label: 'Мониторинг', icon: 'pulse', group: 'tools', tier: 'core', hint: 'Карта сети: какие устройства в сети, а какие нет (ping, SNMP, трапы), оповещения', keywords: 'мониторинг карта сети доступность snmp трап zabbix заббикс ping не в сети упал оповещение почта' },
   { id: 'scenarios', label: 'Сценарии', icon: 'list', group: 'tools', tier: 'core', hint: 'Готовые пошаговые действия: VLAN, PoE, диски, службы' },
   { id: 'diagnostics', label: 'Диагностика', icon: 'activity', group: 'tools', tier: 'core', hint: 'Проверка порта, коммутатора и сервера одной кнопкой' },
   { id: 'nettools', label: 'Сетевые утилиты', icon: 'calculator', group: 'tools', tier: 'extra', hint: 'Калькулятор подсетей, MAC-адреса, ping, проверка порта, SSH-ключи', keywords: 'калькулятор маска подсеть ip ping трассировка mac ключ' },
@@ -51,7 +52,8 @@ export const NAV_TITLES: Record<string, string> = {
   linux: 'Справочник команд Linux',
   sql: 'Справочник SQL: MySQL, MariaDB, PostgreSQL',
   learn: 'Обучение: руководства и словарь',
-  nettools: 'Сетевые утилиты'
+  nettools: 'Сетевые утилиты',
+  monitor: 'Мониторинг: карта сети и доступность'
 };
 
 type NavSettings = Pick<Settings, 'uiMode' | 'navOverrides' | 'navCollapsed'>;

@@ -3,6 +3,7 @@
 import { useState, type MouseEvent } from 'react';
 import { useApp } from '../lib/store';
 import { Icon } from '../lib/icons';
+import { useMonitor } from '../lib/monitor';
 import { MOD } from '../api';
 import { Button, Modal, PopupMenu, type MenuEntry } from './ui';
 import { NAV, NAV_GROUPS, hiddenNavCount, isNavShown, type NavItem } from '../lib/navigation';
@@ -11,6 +12,7 @@ export function Sidebar({ onToggleCollapse }: { onToggleCollapse: () => void }) 
   const app = useApp();
   const s = app.settings;
   const rail = s.sidebarCollapsed;
+  const mon = useMonitor();
   const locked = app.vault?.mode === 'master' && !app.vault.unlocked;
   const toggleMode = () => void app.updateSettings({ uiMode: s.uiMode === 'simple' ? 'full' : 'simple' });
   const [moreOpen, setMoreOpen] = useState<Record<string, boolean>>({});
@@ -53,6 +55,11 @@ export function Sidebar({ onToggleCollapse }: { onToggleCollapse: () => void }) 
       <span>{n.label}</span>
       {n.id === 'sessions' && app.sessions.length > 0 && <span className="count">{app.sessions.length}</span>}
       {n.id === 'devices' && <span className="count">{app.devices.length}</span>}
+      {n.id === 'monitor' && (mon.status?.counts.down ?? 0) > 0 && (
+        <span className="count danger" title="Не в сети">
+          {mon.status!.counts.down}
+        </span>
+      )}
     </button>
   );
 

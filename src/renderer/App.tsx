@@ -14,6 +14,7 @@ import { PromptHost } from './components/Prompts';
 import { DeviceEditor } from './components/DeviceEditor';
 import { HomeView } from './views/HomeView';
 import { DevicesView, ExportDevicesDialog, ImportDevicesDialog } from './views/DevicesView';
+import { MonitorView } from './views/MonitorView';
 import { QuickConnect, SessionsView, sessionsAction } from './views/SessionsView';
 import { NotesPanel, ReferenceView } from './views/ReferenceView';
 import { LearnView } from './views/LearnView';
@@ -123,6 +124,7 @@ export function App() {
         } else if (e.action === 'hotkeys') showHotkeys();
         else if (e.action === 'about') showAbout();
         else if (e.action === 'import-txt' || e.action === 'import-export') app.setSection('settings');
+        else if (e.action.startsWith('section:')) app.setSection(e.action.slice(8) as never);
       }),
     [app, toggleSidebar, showHotkeys, showAbout]
   );
@@ -241,6 +243,7 @@ export function App() {
           {(app.section === 'switches' || app.section === 'reference') && <ReferenceView preset="switch" />}
           {app.section === 'linux' && <ReferenceView preset="linux" />}
           {app.section === 'sql' && <ReferenceView preset="sql" />}
+          {app.section === 'monitor' && <MonitorView />}
           {app.section === 'learn' && <LearnView />}
           {app.section === 'notes' && (
             <div className="columns" style={{ flexDirection: 'column' }}>

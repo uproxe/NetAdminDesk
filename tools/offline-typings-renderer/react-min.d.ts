@@ -38,6 +38,13 @@ declare module 'react' {
     preventDefault(): void;
     stopPropagation(): void;
   }
+  export interface PointerEvent<T = Element> extends MouseEvent<T> {
+    pointerId: number;
+    shiftKey: boolean;
+  }
+  export interface WheelEvent<T = Element> extends MouseEvent<T> {
+    deltaY: number;
+  }
   export interface KeyboardEvent<T = Element> {
     key: string;
     code: string;

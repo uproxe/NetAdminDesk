@@ -15,4 +15,5 @@ export type Section =
   | 'history'
   | 'backups'
   | 'nettools'
+  | 'monitor'
   | 'settings';
