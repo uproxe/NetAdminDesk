@@ -8,7 +8,7 @@ import type { SessionManager, PromptBridge, CredentialPrompt } from './ssh/manag
 import type { TunnelManager } from './ssh/extras';
 import { probeSsh } from './ssh/probe';
 import { utils as ssh2Utils } from 'ssh2';
-import { createSshKey, tcpCheck, type LocalTools } from './tools';
+import { createSshKey, tcpCheck, validHost, type LocalTools } from './tools';
 import { sftpDownload, sftpList, sftpMkdir, sftpRealpath, sftpRemove, sftpRename, sftpUpload } from './ssh/extras';
 import type { BackupService } from './backups';
 import { listAutoBackups } from './backups';
@@ -20,6 +20,8 @@ import { importTxtBytes, previewTxtBytes } from './seed';
 import * as io from './importExport';
 import { sha256Hex } from './crypto';
 import { SCHEMA_VERSION } from './db/schema';
+import { MonitorEngine, communityKey, MAIL_PASSWORD_KEY, TRAP_COMMUNITY_KEY } from './monitor/engine';
+import type { MonitorMapInput, MonitorNodeInput } from '../shared/monitor';
 
 declare const __APP_VERSION__: string;
 
@@ -35,6 +37,9 @@ export interface IpcContext {
   restoreDatabase: (path: string) => void;
   serialBridge: RendererSerialBridge;
   localTools: LocalTools;
+  monitor: MonitorEngine;
+  /** Вызывается после изменения настроек фоновой работы (значок в трее, автозапуск). */
+  onMonitorSettings?: () => void;
 }
 
 export interface SerialPortChoice {
@@ -365,6 +370,80 @@ export function registerIpc(ctx: IpcContext, bridge: RendererPromptBridge): void
     prompts: {
       respond: (requestId: string, answer: unknown) => bridge.respond(requestId, answer)
     },
+    monitor: (() => {
+      const mon = ctx.monitor;
+      const validNode = (n: MonitorNodeInput) => {
+        if (!n.name?.trim()) throw new Error('Укажите название узла');
+        if (!validHost(n.host?.trim() ?? '')) throw new Error(`«${n.host}» — не IP-адрес и не имя узла`);
+        if (n.method === 'tcp' && !(n.tcpPort > 0 && n.tcpPort < 65536)) throw new Error('Для проверки TCP укажите порт от 1 до 65535');
+      };
+      const saveOne = (n: MonitorNodeInput) => {
+        validNode(n);
+        const { community, ...rest } = n;
+        if (community && !ctx.vault.canStore()) throw new Error('SNMP community нельзя сохранить: хранилище паролей не настроено или заблокировано («Настройки → Пароли»)');
+        const saved = db.saveMonitorNode(rest);
+        if (community !== undefined) ctx.vault.storeApp(communityKey(saved.id), community || null);
+        return db.getMonitorNode(saved.id)!;
+      };
+      return {
+        status: () => mon.status(),
+        states: () => mon.listStates(),
+        nodes: () => db.listMonitorNodes(),
+        saveNode: (n: MonitorNodeInput) => {
+          const r = saveOne(n);
+          db.flush();
+          mon.reloadNodes();
+          return r;
+        },
+        removeNode: (id: number) => {
+          db.deleteMonitorNode(id);
+          db.flush();
+          mon.reloadNodes();
+        },
+        bulkAdd: (list: MonitorNodeInput[]) => {
+          if (list.length > 2000) throw new Error('За один раз можно добавить не больше 2000 узлов');
+          list.forEach(validNode);
+          if (list.some((n) => n.community) && !ctx.vault.canStore()) throw new Error('SNMP community нельзя сохранить: хранилище паролей не настроено или заблокировано');
+          db.tx(() => {
+            for (const n of list) saveOne(n);
+          });
+          db.flush();
+          mon.reloadNodes();
+          return list.length;
+        },
+        maps: () => db.listMonitorMaps(),
+        saveMap: (m: MonitorMapInput) => {
+          if (m.background && (!/^data:image\/(png|jpeg|gif|webp|svg\+xml);base64,/.test(m.background) || m.background.length > 12_000_000)) throw new Error('Подложка карты — картинка PNG, JPEG, GIF, WebP или SVG до 8 МБ');
+          const r = db.saveMonitorMap(m);
+          db.flush();
+          return r;
+        },
+        removeMap: (id: number) => {
+          db.deleteMonitorMap(id);
+          db.flush();
+        },
+        events: (f?: { nodeId?: number; limit?: number }) => db.listMonitorEvents(f ?? {}),
+        clearEvents: () => {
+          db.clearMonitorEvents();
+          db.flush();
+        },
+        checkNow: (id: number) => mon.checkNow(id),
+        ports: (id: number) => mon.ports(id),
+        clearPorts: (id: number) => mon.clearPorts(id),
+        setSecret: (which: 'smtp-password' | 'trap-community', value: string | null) => {
+          if (value && !ctx.vault.canStore()) throw new Error('Нельзя сохранить: хранилище паролей не настроено или заблокировано («Настройки → Пароли»)');
+          ctx.vault.storeApp(which === 'smtp-password' ? MAIL_PASSWORD_KEY : TRAP_COMMUNITY_KEY, value || null);
+          db.flush();
+          return mon.applySettings();
+        },
+        testMail: () => mon.testMail(),
+        applySettings: async () => {
+          await mon.applySettings();
+          ctx.onMonitorSettings?.();
+          return mon.status();
+        }
+      };
+    })(),
     sftp: {
       list: async (id: string, p: string) => sftpList(await sessions.session(id).sftp(), p),
       download: async (id: string, r: string, l: string) => {

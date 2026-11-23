@@ -96,12 +96,14 @@ export class Vault {
   setupMaster(password: string): void {
     if (password.length < 8) throw new Error('Мастер-пароль должен быть не короче 8 символов');
     const plain = this.settings.vaultMode !== 'unset' ? this.readAll() : [];
+    const plainApp = this.settings.vaultMode !== 'unset' ? this.readAllApp() : [];
     const kdf = newKdf();
     const key = deriveKey(password, kdf);
     this.db.setMeta('vault_master', JSON.stringify({ kdf, check: seal(key, CHECK_TEXT, 'vault-check') }));
     this.masterKey = key;
     this.db.setSettings({ vaultMode: 'master' });
     this.writeAll(plain);
+    for (const a of plainApp) this.storeApp(a.key, a.value);
   }
 
   unlock(password: string): boolean {
@@ -130,12 +132,15 @@ export class Vault {
   switchMode(mode: 'os' | 'prompt'): void {
     if (mode === 'os' && !this.osSecure()) throw new Error('Системное защищённое хранилище недоступно');
     const plain = this.readAll();
+    const plainApp = this.readAllApp();
     this.db.setSettings({ vaultMode: mode });
     if (mode === 'prompt') {
       for (const r of this.db.listSecretRows()) this.db.deleteSecret(r.deviceId, r.kind);
+      for (const r of this.db.listAppSecretRows()) this.db.deleteAppSecret(r.key);
       return;
     }
     this.writeAll(plain);
+    for (const a of plainApp) this.storeApp(a.key, a.value);
   }
 
   private encrypt(value: string): { scheme: string; blob: string } {
@@ -184,6 +189,40 @@ export class Vault {
         `Не удалось расшифровать сохранённый секрет (${(e as Error).message}). Если база перенесена с другого компьютера, введите пароль заново или используйте зашифрованный перенос.`
       );
     }
+  }
+
+  // ---------- Секреты приложения: SNMP community узлов мониторинга, пароль почты ----------
+
+  storeApp(key: string, value: string | null | undefined): void {
+    if (value === undefined) return;
+    if (value === null || value === '') {
+      this.db.deleteAppSecret(key);
+      return;
+    }
+    const { scheme, blob } = this.encrypt(value);
+    this.db.setAppSecret(key, scheme, blob);
+  }
+
+  readApp(key: string): string | undefined {
+    const row = this.db.getAppSecret(key);
+    if (!row) return undefined;
+    return this.decrypt(row.scheme, row.blob);
+  }
+
+  hasApp(key: string): boolean {
+    return !!this.db.getAppSecret(key);
+  }
+
+  private readAllApp(): { key: string; value: string }[] {
+    const out: { key: string; value: string }[] = [];
+    for (const r of this.db.listAppSecretRows()) {
+      try {
+        out.push({ key: r.key, value: this.decrypt(r.scheme, r.blob) });
+      } catch {
+        /* нерасшифровываемый секрет пропускается — его нужно ввести заново */
+      }
+    }
+    return out;
   }
 
   state(deviceId: number): DeviceSecretsState {

@@ -35,6 +35,7 @@ import type {
   VaultStatus
 } from './types';
 import type { DiffHunk } from './diff';
+import type { MonitorEvent, MonitorMap, MonitorMapInput, MonitorNode, MonitorNodeInput, MonitorState, MonitorStatusInfo } from './monitor';
 
 export const API_SPEC = {
   app: ['info', 'openExternal', 'showItemInFolder', 'openPath', 'selectFile', 'selectSaveFile', 'selectDirectory', 'clipboardWrite', 'clipboardRead', 'setZoom', 'relaunch', 'readTextFile', 'writeTextFile', 'ready'],
@@ -78,7 +79,8 @@ export const API_SPEC = {
     'restoreDatabase',
     'importReports'
   ],
-  db: ['integrity', 'autoBackups', 'restoreAutoBackup']
+  db: ['integrity', 'autoBackups', 'restoreAutoBackup'],
+  monitor: ['status', 'states', 'nodes', 'saveNode', 'removeNode', 'bulkAdd', 'maps', 'saveMap', 'removeMap', 'events', 'clearEvents', 'checkNow', 'ports', 'clearPorts', 'setSecret', 'testMail', 'applySettings']
 } as const;
 
 export type ApiNamespace = keyof typeof API_SPEC;
@@ -98,7 +100,10 @@ export type NadEvent =
   | { type: 'serial:close'; id: string }
   | { type: 'tools:output'; runId: string; chunk: string }
   | { type: 'tools:done'; runId: string; code: number | null }
-  | { type: 'data:changed'; what: 'commands' | 'devices' | 'scenarios' | 'history' | 'settings' | 'all' };
+  | { type: 'data:changed'; what: 'commands' | 'devices' | 'scenarios' | 'history' | 'settings' | 'monitor' | 'all' }
+  | { type: 'monitor:states'; states: MonitorState[] }
+  | { type: 'monitor:event'; event: MonitorEvent }
+  | { type: 'monitor:status'; status: MonitorStatusInfo };
 
 export type AnyPrompt =
   | ({ kind: 'hostKey' } & import('./types').HostKeyPrompt)
@@ -264,6 +269,28 @@ export interface NadApi {
   };
   prompts: {
     respond(requestId: string, answer: unknown): Promise<void>;
+  };
+  monitor: {
+    status(): Promise<MonitorStatusInfo>;
+    states(): Promise<MonitorState[]>;
+    nodes(): Promise<MonitorNode[]>;
+    /** community: undefined — не менять, '' — удалить; хранится в защищённом хранилище. */
+    saveNode(n: MonitorNodeInput): Promise<MonitorNode>;
+    removeNode(id: number): Promise<void>;
+    bulkAdd(nodes: MonitorNodeInput[]): Promise<number>;
+    maps(): Promise<MonitorMap[]>;
+    saveMap(m: MonitorMapInput): Promise<MonitorMap>;
+    removeMap(id: number): Promise<void>;
+    events(filter?: { nodeId?: number; limit?: number }): Promise<MonitorEvent[]>;
+    clearEvents(): Promise<void>;
+    checkNow(id: number): Promise<MonitorState | undefined>;
+    ports(id: number): Promise<{ ifIndex: number; name: string; alias: string; oper: string; admin: string; speedMbps: number }[]>;
+    clearPorts(id: number): Promise<void>;
+    /** Пароль почты (smtp-password) или community для проверки трапов (trap-community). */
+    setSecret(which: 'smtp-password' | 'trap-community', value: string | null): Promise<void>;
+    testMail(): Promise<void>;
+    /** Применить изменённые настройки мониторинга (запуск/остановка опроса и приёма трапов). */
+    applySettings(): Promise<MonitorStatusInfo>;
   };
   sftp: {
     list(sessionId: string, path: string): Promise<SftpEntry[]>;

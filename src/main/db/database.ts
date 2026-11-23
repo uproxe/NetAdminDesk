@@ -20,6 +20,7 @@ import type {
   TxtParseReport
 } from '../../shared/types';
 import { MIGRATIONS, SCHEMA_VERSION } from './schema';
+import { DEFAULT_MONITOR, withMonitorDefaults, type MapItem, type MapLink, type MonitorEvent, type MonitorEventLevel, type MonitorEventType, type MonitorMap, type MonitorMapInput, type MonitorNode, type MonitorNodeInput } from '../../shared/monitor';
 import type { SqlDriver } from './driver';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -49,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   quickCommandsBar: false,
   splitRatio: 0.62,
   lastSection: 'home',
+  monitor: DEFAULT_MONITOR,
   telemetry: false
 };
 
@@ -775,6 +777,7 @@ export class AppDatabase {
       if (k in DEFAULT_SETTINGS) s[k] = pj(r.value, (DEFAULT_SETTINGS as unknown as Record<string, unknown>)[k]);
     }
     s.telemetry = false;
+    s.monitor = withMonitorDefaults(s.monitor as never);
     return s as unknown as Settings;
   }
 
@@ -861,5 +864,159 @@ export class AppDatabase {
 
   saveCustomPlatform(id: string, name: string, vendor = ''): void {
     this.driver.run('INSERT INTO custom_platforms(id, name, vendor) VALUES(?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, vendor = excluded.vendor', [id, name, vendor]);
+  }
+
+  // ---------- Секреты приложения (не привязанные к устройству) ----------
+
+  getAppSecret(key: string): { scheme: string; blob: string } | undefined {
+    return this.driver.get<{ scheme: string; blob: string }>('SELECT scheme, blob FROM app_secrets WHERE key = ?', [key]);
+  }
+
+  setAppSecret(key: string, scheme: string, blob: string): void {
+    this.driver.run('INSERT INTO app_secrets(key, scheme, blob, updated_at) VALUES(?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET scheme = excluded.scheme, blob = excluded.blob, updated_at = excluded.updated_at', [key, scheme, blob, now()]);
+  }
+
+  deleteAppSecret(key: string): void {
+    this.driver.run('DELETE FROM app_secrets WHERE key = ?', [key]);
+  }
+
+  listAppSecretRows(): { key: string; scheme: string; blob: string }[] {
+    return this.driver.all<Row>('SELECT key, scheme, blob FROM app_secrets').map((r) => ({ key: String(r.key), scheme: String(r.scheme), blob: String(r.blob) }));
+  }
+
+  // ---------- Мониторинг ----------
+
+  listMonitorNodes(): MonitorNode[] {
+    const withSecret = new Set(this.listAppSecretRows().map((r) => r.key));
+    return this.driver.all<Row>('SELECT * FROM monitor_nodes ORDER BY name COLLATE NOCASE, id').map((r) => ({
+      id: Number(r.id),
+      name: String(r.name),
+      host: String(r.host),
+      kind: String(r.kind) as MonitorNode['kind'],
+      vendor: String(r.vendor),
+      method: String(r.method) as MonitorNode['method'],
+      snmpVersion: Number(r.snmp_version) === 1 ? 1 : 2,
+      snmpPort: Number(r.snmp_port),
+      tcpPort: Number(r.tcp_port),
+      intervalSec: Number(r.interval_sec),
+      enabled: !!Number(r.enabled),
+      deviceId: r.device_id == null ? null : Number(r.device_id),
+      notes: String(r.notes),
+      hasCommunity: withSecret.has(`monitor:community:${r.id}`),
+      createdAt: String(r.created_at),
+      updatedAt: String(r.updated_at)
+    }));
+  }
+
+  getMonitorNode(id: number): MonitorNode | undefined {
+    return this.listMonitorNodes().find((n) => n.id === id);
+  }
+
+  saveMonitorNode(n: MonitorNodeInput): MonitorNode {
+    const ts = now();
+    const vals = [n.name.trim(), n.host.trim(), n.kind, n.vendor, n.method, n.snmpVersion, n.snmpPort, n.tcpPort, n.intervalSec, n.enabled ? 1 : 0, n.deviceId, n.notes];
+    let id = n.id;
+    if (id) this.driver.run('UPDATE monitor_nodes SET name = ?, host = ?, kind = ?, vendor = ?, method = ?, snmp_version = ?, snmp_port = ?, tcp_port = ?, interval_sec = ?, enabled = ?, device_id = ?, notes = ?, updated_at = ? WHERE id = ?', [...vals, ts, id]);
+    else id = this.driver.run('INSERT INTO monitor_nodes(name, host, kind, vendor, method, snmp_version, snmp_port, tcp_port, interval_sec, enabled, device_id, notes, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [...vals, ts, ts]).lastInsertRowid;
+    return this.getMonitorNode(id)!;
+  }
+
+  deleteMonitorNode(id: number): void {
+    this.tx(() => {
+      this.driver.run('DELETE FROM monitor_map_items WHERE node_id = ?', [id]);
+      this.driver.run('DELETE FROM monitor_links WHERE a = ? OR b = ?', [id, id]);
+      this.driver.run('DELETE FROM monitor_nodes WHERE id = ?', [id]);
+      this.deleteAppSecret(`monitor:community:${id}`);
+    });
+  }
+
+  listMonitorMaps(): MonitorMap[] {
+    const items = this.driver.all<Row>('SELECT * FROM monitor_map_items');
+    const links = this.driver.all<Row>('SELECT * FROM monitor_links ORDER BY id');
+    return this.driver.all<Row>('SELECT * FROM monitor_maps ORDER BY id').map((r) => ({
+      id: Number(r.id),
+      name: String(r.name),
+      background: String(r.background),
+      width: Number(r.width),
+      height: Number(r.height),
+      items: items.filter((i) => Number(i.map_id) === Number(r.id)).map((i): MapItem => ({ nodeId: Number(i.node_id), x: Number(i.x), y: Number(i.y) })),
+      links: links.filter((l) => Number(l.map_id) === Number(r.id)).map((l): MapLink => ({ id: Number(l.id), a: Number(l.a), b: Number(l.b), label: String(l.label) })),
+      createdAt: String(r.created_at),
+      updatedAt: String(r.updated_at)
+    }));
+  }
+
+  /** Карта целиком: свойства, расположение узлов и связи заменяются переданными. */
+  saveMonitorMap(m: MonitorMapInput): MonitorMap {
+    const ts = now();
+    const nodes = new Set(this.driver.all<Row>('SELECT id FROM monitor_nodes').map((r) => Number(r.id)));
+    const id = this.tx(() => {
+      let mid = m.id;
+      if (mid) this.driver.run('UPDATE monitor_maps SET name = ?, background = ?, width = ?, height = ?, updated_at = ? WHERE id = ?', [m.name.trim() || 'Карта', m.background, m.width, m.height, ts, mid]);
+      else mid = this.driver.run('INSERT INTO monitor_maps(name, background, width, height, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?)', [m.name.trim() || 'Карта', m.background, m.width, m.height, ts, ts]).lastInsertRowid;
+      this.driver.run('DELETE FROM monitor_map_items WHERE map_id = ?', [mid]);
+      this.driver.run('DELETE FROM monitor_links WHERE map_id = ?', [mid]);
+      const seen = new Set<number>();
+      for (const it of m.items) {
+        if (!nodes.has(it.nodeId) || seen.has(it.nodeId)) continue;
+        seen.add(it.nodeId);
+        this.driver.run('INSERT INTO monitor_map_items(map_id, node_id, x, y) VALUES(?, ?, ?, ?)', [mid, it.nodeId, Math.round(it.x), Math.round(it.y)]);
+      }
+      const pairs = new Set<string>();
+      for (const l of m.links) {
+        const key = [Math.min(l.a, l.b), Math.max(l.a, l.b)].join('-');
+        if (l.a === l.b || !seen.has(l.a) || !seen.has(l.b) || pairs.has(key)) continue;
+        pairs.add(key);
+        this.driver.run('INSERT INTO monitor_links(map_id, a, b, label) VALUES(?, ?, ?, ?)', [mid, l.a, l.b, l.label ?? '']);
+      }
+      return mid;
+    });
+    return this.listMonitorMaps().find((x) => x.id === id)!;
+  }
+
+  deleteMonitorMap(id: number): void {
+    this.tx(() => {
+      this.driver.run('DELETE FROM monitor_map_items WHERE map_id = ?', [id]);
+      this.driver.run('DELETE FROM monitor_links WHERE map_id = ?', [id]);
+      this.driver.run('DELETE FROM monitor_maps WHERE id = ?', [id]);
+    });
+  }
+
+  addMonitorEvent(e: { nodeId: number | null; nodeName: string; level: MonitorEventLevel; type: MonitorEventType; message: string; ts?: string }): MonitorEvent {
+    const ts = e.ts ?? now();
+    const id = this.driver.run('INSERT INTO monitor_events(ts, node_id, node_name, level, type, message) VALUES(?, ?, ?, ?, ?, ?)', [ts, e.nodeId, e.nodeName, e.level, e.type, e.message]).lastInsertRowid;
+    return { id, ts, nodeId: e.nodeId, nodeName: e.nodeName, level: e.level, type: e.type, message: e.message };
+  }
+
+  listMonitorEvents(filter: { nodeId?: number; limit?: number; level?: MonitorEventLevel } = {}): MonitorEvent[] {
+    const where: string[] = [];
+    const args: unknown[] = [];
+    if (filter.nodeId) {
+      where.push('node_id = ?');
+      args.push(filter.nodeId);
+    }
+    if (filter.level) {
+      where.push('level = ?');
+      args.push(filter.level);
+    }
+    const sql = `SELECT * FROM monitor_events ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ${Math.min(Math.max(filter.limit ?? 500, 1), 5000)}`;
+    return this.driver.all<Row>(sql, args).map((r) => ({
+      id: Number(r.id),
+      ts: String(r.ts),
+      nodeId: r.node_id == null ? null : Number(r.node_id),
+      nodeName: String(r.node_name),
+      level: String(r.level) as MonitorEventLevel,
+      type: String(r.type) as MonitorEventType,
+      message: String(r.message)
+    }));
+  }
+
+  /** Хранить не больше keep последних событий. */
+  pruneMonitorEvents(keep = 20000): void {
+    this.driver.run('DELETE FROM monitor_events WHERE id <= (SELECT id FROM monitor_events ORDER BY id DESC LIMIT 1 OFFSET ?)', [keep]);
+  }
+
+  clearMonitorEvents(): void {
+    this.driver.run('DELETE FROM monitor_events');
   }
 }

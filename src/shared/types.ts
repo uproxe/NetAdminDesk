@@ -306,6 +306,8 @@ export interface Settings extends ThemeSettings {
   quickCommandsBar: boolean;
   splitRatio: number;
   lastSection: string;
+  /** Мониторинг доступности узлов (опрос, трапы, оповещения). */
+  monitor: import('./monitor').MonitorSettings;
   telemetry: false;
 }
 

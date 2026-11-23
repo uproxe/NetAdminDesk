@@ -1,5 +1,5 @@
 // Точка входа main-процесса NetAdmin Desk.
-import { app, BrowserWindow, dialog, Menu, safeStorage, session, shell, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, safeStorage, session, shell, Tray, type MenuItemConstructorOptions } from 'electron';
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openDriver } from './db/driver';
@@ -13,6 +13,7 @@ import { BackupService, autoBackupDatabase, listAutoBackups } from './backups';
 import { RendererPromptBridge, RendererSerialBridge, registerIpc, sendEvent, type SerialPortChoice } from './ipc';
 import { maskSecrets } from '../shared/risk';
 import { LocalTools } from './tools';
+import { MonitorEngine } from './monitor/engine';
 
 declare const __APP_VERSION__: string;
 
@@ -22,6 +23,12 @@ let db: AppDatabase | null = null;
 let sessions: SessionManager | null = null;
 let tunnels: TunnelManager | null = null;
 let localTools: LocalTools | null = null;
+let monitor: MonitorEngine | null = null;
+let tray: Tray | null = null;
+/** true — приложение действительно закрывается (а не прячется в область уведомлений). */
+let quitting = false;
+let trayHintShown = false;
+const START_HIDDEN = process.argv.includes('--hidden');
 let paths: DataPaths;
 let rendererReady: () => void = () => {};
 const rendererReadyPromise = new Promise<void>((r) => (rendererReady = r));
@@ -65,6 +72,7 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
 app.on('second-instance', () => {
   if (win) {
     if (win.isMinimized()) win.restore();
+    win.show();
     win.focus();
   }
 });
@@ -161,7 +169,20 @@ function createWindow(): void {
     }
   });
   win.once('ready-to-show', () => {
-    if (!SMOKE) win?.show();
+    if (SMOKE) return;
+    if (START_HIDDEN && keepRunningInBackground()) ensureTray();
+    else win?.show();
+  });
+  // Закрытие окна при включённом мониторинге в фоне: окно прячется, проверки продолжаются.
+  win.on('close', (e: { preventDefault(): void }) => {
+    if (quitting || SMOKE || !keepRunningInBackground()) return;
+    e.preventDefault();
+    win?.hide();
+    ensureTray();
+    if (!trayHintShown) {
+      trayHintShown = true;
+      notify('NetAdmin Desk работает в фоне', 'Мониторинг продолжается. Открыть окно или выйти — через значок в области уведомлений.');
+    }
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
@@ -178,6 +199,77 @@ function createWindow(): void {
   win.webContents.on('preload-error', (_e, p, err) => rendererErrors.push(`preload-error ${p}: ${err.message}`));
   win.on('closed', () => (win = null));
   void win.loadFile(join(__dirname, '../renderer/index.html'));
+}
+
+function keepRunningInBackground(): boolean {
+  if (!db) return false;
+  const m = db.getSettings().monitor;
+  return m.enabled && m.background.keepRunning && db.listMonitorNodes().length > 0;
+}
+
+function notify(title: string, body: string): void {
+  try {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({ title, body });
+    n.on('click', () => showWindow('monitor'));
+    n.show();
+  } catch {
+    /* уведомления недоступны в этой системе */
+  }
+}
+
+function showWindow(section?: string): void {
+  if (!win) createWindow();
+  win?.show();
+  win?.focus();
+  if (section) sendEvent(win, { type: 'menu', action: `section:${section}` });
+}
+
+function trayMenu(): void {
+  if (!tray || !monitor) return;
+  const c = monitor.status().counts;
+  tray.setToolTip(`NetAdmin Desk — в сети ${c.up}, проблемы ${c.warn}, не в сети ${c.down}`);
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Открыть NetAdmin Desk', click: () => showWindow() },
+      { label: 'Открыть мониторинг', click: () => showWindow('monitor') },
+      { type: 'separator' },
+      { label: `Не в сети: ${c.down}${c.warn ? `, с проблемами: ${c.warn}` : ''}`, enabled: false } as MenuItemConstructorOptions,
+      { type: 'separator' },
+      {
+        label: 'Выход',
+        click: () => {
+          quitting = true;
+          app.quit();
+        }
+      }
+    ])
+  );
+}
+
+function ensureTray(): void {
+  if (tray && !tray.isDestroyed()) return trayMenu();
+  const iconPath = join(__dirname, '../renderer/icon.png');
+  const img = existsSync(iconPath) ? nativeImage.createFromPath(iconPath).resize({ width: process.platform === 'darwin' ? 18 : 16 }) : nativeImage.createEmpty();
+  tray = new Tray(img);
+  tray.on('click', () => showWindow());
+  tray.on('double-click', () => showWindow());
+  trayMenu();
+}
+
+/** Автозапуск при входе в систему (скрыто, в область уведомлений) — по настройке мониторинга. */
+function applyBackgroundSettings(): void {
+  if (!db || SMOKE) return;
+  const m = db.getSettings().monitor;
+  try {
+    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: m.background.openAtLogin, args: ['--hidden'] });
+  } catch {
+    /* не поддерживается в этой системе */
+  }
+  if (!keepRunningInBackground() && tray && win?.isVisible()) {
+    tray.destroy();
+    tray = null;
+  }
 }
 
 function buildMenu(): void {
@@ -296,6 +388,15 @@ async function init(): Promise<void> {
   tunnels = new TunnelManager();
   localTools = new LocalTools((e) => sendEvent(win, e));
   const backups = new BackupService(db, sessions, paths.backupsDir);
+  monitor = new MonitorEngine(
+    db,
+    vault,
+    (e) => {
+      sendEvent(win, e);
+      if (e.type === 'monitor:status' && tray) trayMenu();
+    },
+    { desktopNotify: (t, b) => notify(t, b) }
+  );
   registerIpc(
     {
       db,
@@ -308,12 +409,18 @@ async function init(): Promise<void> {
       onRendererReady: () => rendererReady(),
       restoreDatabase,
       serialBridge,
-      localTools
+      localTools,
+      monitor,
+      onMonitorSettings: applyBackgroundSettings
     },
     bridge
   );
   buildMenu();
   createWindow();
+  if (!SMOKE) {
+    void monitor.start();
+    applyBackgroundSettings();
+  }
   if (SMOKE) void runSmokeTest(vault, seed.reports.length);
 }
 
@@ -324,15 +431,20 @@ app.whenReady().then(init).catch((e) => {
 });
 
 app.on('window-all-closed', () => {
+  if (keepRunningInBackground() && !quitting && !SMOKE) return;
   if (process.platform !== 'darwin' || SMOKE) app.quit();
 });
 
 app.on('activate', () => {
   if (!win && db) createWindow();
+  else win?.show();
 });
 
 app.on('before-quit', () => {
+  quitting = true;
   try {
+    monitor?.stop();
+    tray?.destroy();
     tunnels?.stopAll();
     localTools?.stopAll();
     sessions?.disconnectAll();

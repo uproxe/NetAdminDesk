@@ -15,7 +15,26 @@ declare module 'electron' {
     restore(): void;
     focus(): void;
     show(): void;
+    hide(): void;
+    isVisible(): boolean;
     loadFile(p: string): Promise<void>;
+  }
+  export interface NativeImage {
+    resize(o: { width?: number; height?: number }): NativeImage;
+    isEmpty(): boolean;
+  }
+  export const nativeImage: { createFromPath(p: string): NativeImage; createEmpty(): NativeImage };
+  export class Tray extends EventEmitter {
+    constructor(image: NativeImage | string);
+    setToolTip(t: string): void;
+    setContextMenu(m: unknown): void;
+    destroy(): void;
+    isDestroyed(): boolean;
+  }
+  export class Notification extends EventEmitter {
+    constructor(o: { title: string; body?: string; silent?: boolean });
+    static isSupported(): boolean;
+    show(): void;
   }
   export interface IpcMainInvokeEvent { sender: WebContents }
   export const ipcMain: { handle(ch: string, h: (e: IpcMainInvokeEvent, ...args: any[]) => unknown): void };
@@ -36,6 +55,7 @@ declare module 'electron' {
     exit(code?: number): void;
     relaunch(): void;
     requestSingleInstanceLock(): boolean;
+    setLoginItemSettings(o: { openAtLogin: boolean; args?: string[] }): void;
     isPackaged: boolean;
   };
   export const dialog: {

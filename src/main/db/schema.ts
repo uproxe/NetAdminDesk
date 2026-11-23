@@ -217,6 +217,68 @@ ALTER TABLE devices ADD COLUMN serial_baud INTEGER NOT NULL DEFAULT 9600;
 ALTER TABLE devices ADD COLUMN login_commands TEXT NOT NULL DEFAULT '';
 ALTER TABLE devices ADD COLUMN color TEXT NOT NULL DEFAULT '';
 `
+  },
+  {
+    version: 3,
+    description: 'Мониторинг доступности: узлы, карты, события; секреты приложения (SNMP community, пароль почты)',
+    sql: `
+CREATE TABLE app_secrets (
+  key TEXT PRIMARY KEY,
+  scheme TEXT NOT NULL,
+  blob TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE monitor_nodes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  host TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'other',
+  vendor TEXT NOT NULL DEFAULT '',
+  method TEXT NOT NULL DEFAULT 'ping',
+  snmp_version INTEGER NOT NULL DEFAULT 2,
+  snmp_port INTEGER NOT NULL DEFAULT 161,
+  tcp_port INTEGER NOT NULL DEFAULT 0,
+  interval_sec INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE monitor_maps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  background TEXT NOT NULL DEFAULT '',
+  width INTEGER NOT NULL DEFAULT 1600,
+  height INTEGER NOT NULL DEFAULT 1000,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE monitor_map_items (
+  map_id INTEGER NOT NULL REFERENCES monitor_maps(id) ON DELETE CASCADE,
+  node_id INTEGER NOT NULL REFERENCES monitor_nodes(id) ON DELETE CASCADE,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  PRIMARY KEY (map_id, node_id)
+);
+CREATE TABLE monitor_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  map_id INTEGER NOT NULL REFERENCES monitor_maps(id) ON DELETE CASCADE,
+  a INTEGER NOT NULL REFERENCES monitor_nodes(id) ON DELETE CASCADE,
+  b INTEGER NOT NULL REFERENCES monitor_nodes(id) ON DELETE CASCADE,
+  label TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE monitor_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL,
+  node_id INTEGER,
+  node_name TEXT NOT NULL DEFAULT '',
+  level TEXT NOT NULL,
+  type TEXT NOT NULL,
+  message TEXT NOT NULL
+);
+CREATE INDEX idx_monitor_events_ts ON monitor_events(ts);
+`
   }
 ];
 
