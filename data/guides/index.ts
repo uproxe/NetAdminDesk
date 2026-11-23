@@ -5,9 +5,10 @@ import { GUIDES_TOOLS } from './tools-guides';
 import { GUIDES_DB } from './db-guides';
 import { GUIDES_MONITORING } from './monitoring-guides';
 import { GUIDES_USERGATE } from './usergate-guides';
+import { GUIDES_PASSWORDS } from './passwords-guides';
 import type { Guide } from '../../src/shared/types';
 
-export const GUIDES: Guide[] = [...GUIDES_NETWORK_SWITCH, ...GUIDES_TOOLS, ...GUIDES_MONITORING, ...GUIDES_USERGATE, ...GUIDES_LINUX, ...GUIDES_DB];
+export const GUIDES: Guide[] = [...GUIDES_NETWORK_SWITCH, ...GUIDES_TOOLS, ...GUIDES_MONITORING, ...GUIDES_USERGATE, ...GUIDES_PASSWORDS, ...GUIDES_LINUX, ...GUIDES_DB];
 
 export const GUIDE_SECTIONS: { id: Guide['section']; name: string }[] = [
   { id: 'start', name: 'Первые шаги' },
