@@ -184,15 +184,39 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v6
         with:
           path: dist-release
           merge-multiple: true
       - run: ls -la dist-release
+      - name: Текст релиза из CHANGELOG.md
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Раздел «## [X.Y.Z] — дата» до следующего заголовка версии
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::В CHANGELOG.md нет раздела [$VERSION]"
+            exit 1
+          fi
+          {
+            echo
+            echo '---'
+            echo
+            echo '**Установщики:** Windows x64 (`.exe`), macOS Universal — Intel и Apple Silicon (`.dmg`), Debian/Ubuntu amd64 (`.deb`). Рядом с каждым — файл `.sha256` с контрольной суммой.'
+            echo
+            echo 'Сборки не подписаны сертификатами разработчика: Windows SmartScreen и macOS Gatekeeper покажут предупреждение при первом запуске — как запустить, см. [docs/BUILD.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/BUILD.md#неподписанные-сборки).'
+          } >> release-notes.md
+          cat release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          name: NetAdmin Desk ${{ github.ref_name }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
           files: dist-release/*
-          body: |
-            Установщики NetAdmin Desk ${{ github.ref_name }}.
-            Сборки не подписаны сертификатами разработчика: Windows SmartScreen и macOS Gatekeeper покажут предупреждение при первом запуске (см. docs/BUILD.md).
