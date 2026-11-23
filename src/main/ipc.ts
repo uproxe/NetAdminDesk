@@ -22,6 +22,9 @@ import { sha256Hex } from './crypto';
 import { SCHEMA_VERSION } from './db/schema';
 import { MonitorEngine, communityKey, MAIL_PASSWORD_KEY, TRAP_COMMUNITY_KEY } from './monitor/engine';
 import type { MonitorMapInput, MonitorNodeInput } from '../shared/monitor';
+import type { PasswordStore } from './passwords';
+import type { PmEntryInput, PmExportFormat, PmImportOptions } from '../shared/passwords';
+import { atomicWrite } from './db/driver';
 
 declare const __APP_VERSION__: string;
 
@@ -38,6 +41,7 @@ export interface IpcContext {
   serialBridge: RendererSerialBridge;
   localTools: LocalTools;
   monitor: MonitorEngine;
+  passwords: PasswordStore;
   /** Вызывается после изменения настроек фоновой работы (значок в трее, автозапуск). */
   onMonitorSettings?: () => void;
 }
@@ -369,6 +373,42 @@ export function registerIpc(ctx: IpcContext, bridge: RendererPromptBridge): void
     },
     prompts: {
       respond: (requestId: string, answer: unknown) => bridge.respond(requestId, answer)
+    },
+    passwords: {
+      status: () => ctx.passwords.status(),
+      setup: (pw: string) => ctx.passwords.setup(pw),
+      unlock: (pw: string) => ctx.passwords.unlock(pw),
+      lock: () => ctx.passwords.lock('manual'),
+      changeMaster: (cur: string, next: string) => ctx.passwords.changeMaster(cur, next),
+      reset: (confirm: string) => ctx.passwords.reset(confirm),
+      touch: () => {
+        if (ctx.passwords.isUnlocked()) ctx.passwords.touch();
+      },
+      list: () => ctx.passwords.list(),
+      get: (id: string) => ctx.passwords.get(String(id)),
+      reveal: (id: string, historyIndex?: number) => ctx.passwords.reveal(String(id), historyIndex === undefined || historyIndex === null ? undefined : Number(historyIndex)),
+      save: (e: PmEntryInput) => {
+        if (!e || typeof e !== 'object') throw new Error('Нет данных записи');
+        return ctx.passwords.save(e);
+      },
+      remove: (id: string) => ctx.passwords.remove(String(id)),
+      saveGroup: (g: { id?: string; name: string }) => ctx.passwords.saveGroup(g ?? { name: '' }),
+      removeGroup: (id: string) => ctx.passwords.removeGroup(String(id)),
+      copy: (id: string, field: 'password' | 'username' | 'url', historyIndex?: number) => {
+        if (!['password', 'username', 'url'].includes(field)) throw new Error('Неизвестное поле');
+        return ctx.passwords.copy(String(id), field, db.getSettings().passwords.clipboardClearSec, historyIndex === undefined || historyIndex === null ? undefined : Number(historyIndex));
+      },
+      copyValue: (value: string) => ctx.passwords.copyValue(String(value ?? ''), db.getSettings().passwords.clipboardClearSec),
+      exportFile: async (path: string, o: { format: PmExportFormat; password?: string; masterPassword?: string }) => {
+        if (!path) throw new Error('Не выбран файл');
+        const r = o?.format === 'csv' ? await ctx.passwords.exportCsv(String(o.masterPassword ?? '')) : await ctx.passwords.exportNadpass(String(o?.password ?? ''));
+        atomicWrite(path, r.content);
+        return { count: r.count };
+      },
+      importOpen: (path: string) => ctx.passwords.importOpen(String(path)),
+      importDecrypt: (token: string, pw: string) => ctx.passwords.importDecrypt(String(token), String(pw ?? '')),
+      importCommit: (token: string, o: PmImportOptions) => ctx.passwords.importCommit(String(token), o),
+      importCancel: (token: string) => ctx.passwords.importCancel(String(token))
     },
     monitor: (() => {
       const mon = ctx.monitor;

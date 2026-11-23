@@ -308,6 +308,7 @@ export interface Settings extends ThemeSettings {
   lastSection: string;
   /** Мониторинг доступности узлов (опрос, трапы, оповещения). */
   monitor: import('./monitor').MonitorSettings;
+  passwords: import('./passwords').PmSettings;
   telemetry: false;
 }
 

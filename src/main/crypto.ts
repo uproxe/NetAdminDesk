@@ -1,6 +1,6 @@
 // Криптография: AES-256-GCM и вывод ключа scrypt.
 // Используется для мастер-пароля хранилища секретов и для зашифрованного переноса данных между ОС.
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, scrypt, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 
 export interface KdfParams {
   name: 'scrypt';
@@ -30,6 +30,14 @@ export function deriveKey(password: string, kdf: KdfParams): Buffer {
     p: kdf.p,
     maxmem: 256 * 1024 * 1024
   });
+}
+
+/** То же, что deriveKey, но в пуле потоков libuv — не останавливает main-процесс на время вычисления. */
+export function deriveKeyAsync(password: string, kdf: KdfParams): Promise<Buffer> {
+  if (kdf.name !== 'scrypt') return Promise.reject(new Error(`Неподдерживаемый KDF: ${kdf.name}`));
+  return new Promise((resolve, reject) =>
+    scrypt(password.normalize('NFC'), Buffer.from(kdf.salt, 'base64'), 32, { N: kdf.N, r: kdf.r, p: kdf.p, maxmem: 256 * 1024 * 1024 }, (err, key) => (err ? reject(err) : resolve(key)))
+  );
 }
 
 export function seal(key: Buffer, plaintext: Buffer | string, aad?: string): Sealed {

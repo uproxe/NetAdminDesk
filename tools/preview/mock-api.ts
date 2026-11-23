@@ -29,6 +29,7 @@ import { DB_CHECKS } from '../../src/shared/dbDiag';
 import { checkById } from '../../src/shared/linuxDiag';
 import { DB_SAMPLE } from './db-sample';
 import { createMonitorMock, MOCK_MONITOR_SETTINGS } from './mock-monitor';
+import { createPasswordsMock, MOCK_PM_SETTINGS } from './mock-passwords';
 import { diffLines, toHunks, diffStats } from '../../src/shared/diff';
 import mainTxt from '../../data/user/komandy-kommutatorov.txt';
 import aclTxt from '../../data/user/acl-notes.txt';
@@ -86,6 +87,7 @@ let settings: Settings = {
   splitRatio: 0.62,
   lastSection: 'home',
   monitor: MOCK_MONITOR_SETTINGS,
+  passwords: MOCK_PM_SETTINGS,
   telemetry: false
 };
 const qs = new URLSearchParams(location.search);
@@ -583,6 +585,7 @@ const api: NadApi & { platform: string } = {
     importReports: async () => clone(reports)
   },
   monitor: createMonitorMock(emit),
+  passwords: createPasswordsMock(emit, { configured: new URLSearchParams(location.search).get('pm') !== 'new', unlocked: new URLSearchParams(location.search).get('pm') === 'open' }),
   db: {
     integrity: async () => 'ok',
     autoBackups: async () => [{ name: 'netadmin-2026-11-16.db', size: 1843200, mtime: ago(60 * 20) }],

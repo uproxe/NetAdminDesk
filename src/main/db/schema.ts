@@ -279,6 +279,22 @@ CREATE TABLE monitor_events (
 );
 CREATE INDEX idx_monitor_events_ts ON monitor_events(ts);
 `
+  },
+  {
+    // Менеджер паролей: всё содержимое записей и названия папок — в зашифрованных blob
+    // (AES-256-GCM, ключ из отдельного мастер-пароля менеджера); параметры ключа — в meta.pm_master.
+    version: 4,
+    description: 'Менеджер паролей: зашифрованные записи и папки',
+    sql: `
+CREATE TABLE pm_groups (
+  uid TEXT PRIMARY KEY,
+  blob TEXT NOT NULL
+);
+CREATE TABLE pm_entries (
+  uid TEXT PRIMARY KEY,
+  blob TEXT NOT NULL
+);
+`
   }
 ];
 

@@ -20,6 +20,7 @@ import type {
   TxtParseReport
 } from '../../shared/types';
 import { MIGRATIONS, SCHEMA_VERSION } from './schema';
+import { DEFAULT_PM, withPmDefaults } from '../../shared/passwords';
 import { DEFAULT_MONITOR, withMonitorDefaults, type MapItem, type MapLink, type MonitorEvent, type MonitorEventLevel, type MonitorEventType, type MonitorMap, type MonitorMapInput, type MonitorNode, type MonitorNodeInput } from '../../shared/monitor';
 import type { SqlDriver } from './driver';
 
@@ -51,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   splitRatio: 0.62,
   lastSection: 'home',
   monitor: DEFAULT_MONITOR,
+  passwords: DEFAULT_PM,
   telemetry: false
 };
 
@@ -214,6 +216,10 @@ export class AppDatabase {
 
   setMeta(key: string, value: string): void {
     this.driver.run('INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value]);
+  }
+
+  deleteMeta(key: string): void {
+    this.driver.run('DELETE FROM meta WHERE key = ?', [key]);
   }
 
   flush(): void {
@@ -778,6 +784,7 @@ export class AppDatabase {
     }
     s.telemetry = false;
     s.monitor = withMonitorDefaults(s.monitor as never);
+    s.passwords = withPmDefaults(s.passwords as never);
     return s as unknown as Settings;
   }
 
@@ -882,6 +889,30 @@ export class AppDatabase {
 
   listAppSecretRows(): { key: string; scheme: string; blob: string }[] {
     return this.driver.all<Row>('SELECT key, scheme, blob FROM app_secrets').map((r) => ({ key: String(r.key), scheme: String(r.scheme), blob: String(r.blob) }));
+  }
+
+  // ---------- Менеджер паролей (только зашифрованные blob) ----------
+
+  pmRows(table: 'pm_entries' | 'pm_groups'): { uid: string; blob: string }[] {
+    return this.driver.all<Row>(`SELECT uid, blob FROM ${table}`).map((r) => ({ uid: String(r.uid), blob: String(r.blob) }));
+  }
+
+  pmCount(): number {
+    return Number(this.driver.get<Row>('SELECT COUNT(*) AS n FROM pm_entries')?.n ?? 0);
+  }
+
+  pmPut(table: 'pm_entries' | 'pm_groups', uid: string, blob: string): void {
+    this.driver.run(`INSERT INTO ${table}(uid, blob) VALUES(?, ?) ON CONFLICT(uid) DO UPDATE SET blob = excluded.blob`, [uid, blob]);
+  }
+
+  pmDelete(table: 'pm_entries' | 'pm_groups', uid: string): void {
+    this.driver.run(`DELETE FROM ${table} WHERE uid = ?`, [uid]);
+  }
+
+  pmClear(): void {
+    this.driver.run('DELETE FROM pm_entries');
+    this.driver.run('DELETE FROM pm_groups');
+    this.deleteMeta('pm_master');
   }
 
   // ---------- Мониторинг ----------

@@ -36,6 +36,7 @@ import type {
 } from './types';
 import type { DiffHunk } from './diff';
 import type { MonitorEvent, MonitorMap, MonitorMapInput, MonitorNode, MonitorNodeInput, MonitorState, MonitorStatusInfo } from './monitor';
+import type { PmEntryDetails, PmEntryInput, PmEntrySummary, PmExportFormat, PmGroup, PmImportOptions, PmImportPreview, PmImportResult, PmLockReason, PmStatus } from './passwords';
 
 export const API_SPEC = {
   app: ['info', 'openExternal', 'showItemInFolder', 'openPath', 'selectFile', 'selectSaveFile', 'selectDirectory', 'clipboardWrite', 'clipboardRead', 'setZoom', 'relaunch', 'readTextFile', 'writeTextFile', 'ready'],
@@ -80,7 +81,8 @@ export const API_SPEC = {
     'importReports'
   ],
   db: ['integrity', 'autoBackups', 'restoreAutoBackup'],
-  monitor: ['status', 'states', 'nodes', 'saveNode', 'removeNode', 'bulkAdd', 'maps', 'saveMap', 'removeMap', 'events', 'clearEvents', 'checkNow', 'ports', 'clearPorts', 'setSecret', 'testMail', 'applySettings']
+  monitor: ['status', 'states', 'nodes', 'saveNode', 'removeNode', 'bulkAdd', 'maps', 'saveMap', 'removeMap', 'events', 'clearEvents', 'checkNow', 'ports', 'clearPorts', 'setSecret', 'testMail', 'applySettings'],
+  passwords: ['status', 'setup', 'unlock', 'lock', 'changeMaster', 'reset', 'touch', 'list', 'get', 'reveal', 'save', 'remove', 'saveGroup', 'removeGroup', 'copy', 'copyValue', 'exportFile', 'importOpen', 'importDecrypt', 'importCommit', 'importCancel']
 } as const;
 
 export type ApiNamespace = keyof typeof API_SPEC;
@@ -103,7 +105,8 @@ export type NadEvent =
   | { type: 'data:changed'; what: 'commands' | 'devices' | 'scenarios' | 'history' | 'settings' | 'monitor' | 'all' }
   | { type: 'monitor:states'; states: MonitorState[] }
   | { type: 'monitor:event'; event: MonitorEvent }
-  | { type: 'monitor:status'; status: MonitorStatusInfo };
+  | { type: 'monitor:status'; status: MonitorStatusInfo }
+  | { type: 'pm:locked'; reason: PmLockReason };
 
 export type AnyPrompt =
   | ({ kind: 'hostKey' } & import('./types').HostKeyPrompt)
@@ -291,6 +294,34 @@ export interface NadApi {
     testMail(): Promise<void>;
     /** Применить изменённые настройки мониторинга (запуск/остановка опроса и приёма трапов). */
     applySettings(): Promise<MonitorStatusInfo>;
+  };
+  passwords: {
+    status(): Promise<PmStatus>;
+    setup(masterPassword: string): Promise<PmStatus>;
+    unlock(masterPassword: string): Promise<PmStatus>;
+    lock(): Promise<void>;
+    changeMaster(current: string, next: string): Promise<void>;
+    /** Удалить все записи и мастер-пароль; confirm — слово «УДАЛИТЬ». */
+    reset(confirm: string): Promise<void>;
+    /** Отметка активности для автоблокировки. */
+    touch(): Promise<void>;
+    list(): Promise<{ groups: PmGroup[]; entries: PmEntrySummary[] }>;
+    get(id: string): Promise<PmEntryDetails>;
+    /** Пароль записи или из истории — только по явному действию пользователя. */
+    reveal(id: string, historyIndex?: number): Promise<string>;
+    save(e: PmEntryInput): Promise<PmEntrySummary>;
+    remove(id: string): Promise<void>;
+    saveGroup(g: { id?: string; name: string }): Promise<PmGroup>;
+    removeGroup(id: string): Promise<void>;
+    /** Копирует поле в буфер; пароль удаляется из буфера через заданное в настройках время. */
+    copy(id: string, field: 'password' | 'username' | 'url', historyIndex?: number): Promise<{ clearAfterSec: number }>;
+    copyValue(value: string): Promise<{ clearAfterSec: number }>;
+    /** .nadpass — с паролем файла; csv — без шифрования, нужен мастер-пароль. */
+    exportFile(path: string, o: { format: PmExportFormat; password?: string; masterPassword?: string }): Promise<{ count: number }>;
+    importOpen(path: string): Promise<PmImportPreview>;
+    importDecrypt(token: string, password: string): Promise<PmImportPreview>;
+    importCommit(token: string, o: PmImportOptions): Promise<PmImportResult>;
+    importCancel(token: string): Promise<void>;
   };
   sftp: {
     list(sessionId: string, path: string): Promise<SftpEntry[]>;

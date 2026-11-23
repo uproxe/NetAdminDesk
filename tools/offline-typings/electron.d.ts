@@ -24,6 +24,7 @@ declare module 'electron' {
     isEmpty(): boolean;
   }
   export const nativeImage: { createFromPath(p: string): NativeImage; createEmpty(): NativeImage };
+  export const powerMonitor: EventEmitter;
   export class Tray extends EventEmitter {
     constructor(image: NativeImage | string);
     setToolTip(t: string): void;

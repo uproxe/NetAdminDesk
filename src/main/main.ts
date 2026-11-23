@@ -1,5 +1,5 @@
 // Точка входа main-процесса NetAdmin Desk.
-import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, safeStorage, session, shell, Tray, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, Notification, powerMonitor, safeStorage, session, shell, Tray, type MenuItemConstructorOptions } from 'electron';
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openDriver } from './db/driver';
@@ -14,6 +14,9 @@ import { RendererPromptBridge, RendererSerialBridge, registerIpc, sendEvent, typ
 import { maskSecrets } from '../shared/risk';
 import { LocalTools } from './tools';
 import { MonitorEngine } from './monitor/engine';
+import { PasswordStore, PM_KDF } from './passwords';
+import { deriveKeyAsync, open as openSealed, seal } from './crypto';
+import { randomBytes } from 'node:crypto';
 
 declare const __APP_VERSION__: string;
 
@@ -24,6 +27,7 @@ let sessions: SessionManager | null = null;
 let tunnels: TunnelManager | null = null;
 let localTools: LocalTools | null = null;
 let monitor: MonitorEngine | null = null;
+let passwords: PasswordStore | null = null;
 let tray: Tray | null = null;
 /** true — приложение действительно закрывается (а не прячется в область уведомлений). */
 let quitting = false;
@@ -197,6 +201,12 @@ function createWindow(): void {
   }) as never);
   win.webContents.on('render-process-gone', (_e, d) => rendererErrors.push(`render-process-gone: ${d.reason}`));
   win.webContents.on('preload-error', (_e, p, err) => rendererErrors.push(`preload-error ${p}: ${err.message}`));
+  // Менеджер паролей: блокировка при сворачивании или скрытии окна (если включено в настройках).
+  const lockOnHide = () => {
+    if (db && db.getSettings().passwords.lockOnMinimize) passwords?.lock('minimize');
+  };
+  win.on('minimize', lockOnHide);
+  win.on('hide', lockOnHide);
   win.on('closed', () => (win = null));
   void win.loadFile(join(__dirname, '../renderer/index.html'));
 }
@@ -345,6 +355,12 @@ async function runSmokeTest(vault: Vault, seedReports: number): Promise<void> {
     check('userTxtImported', reports.length >= 1 || seedReports === 0, reports.map((r) => ({ file: r.file, entries: r.report.entries, unaccounted: r.report.unaccounted.length })));
     check('noUnaccountedLines', reports.every((r) => r.report.unaccounted.length === 0));
     check('vault', true, vault.status());
+    // Менеджер паролей: схема базы и scrypt с рабочими параметрами в криптобиблиотеке Electron
+    check('passwordManagerSchema', Number(db!.getMeta('schema_version')) >= 4, { entries: db!.pmCount() });
+    const pmStart = Date.now();
+    const pmKey = await deriveKeyAsync('smoke-test-only', { name: 'scrypt', ...PM_KDF, salt: randomBytes(16).toString('base64') });
+    const pmBack = openSealed(pmKey, seal(pmKey, 'nad-smoke', 'nad-pm:smoke'), 'nad-pm:smoke').toString('utf8');
+    check('passwordManagerCrypto', pmKey.length === 32 && pmBack === 'nad-smoke', { scryptMs: Date.now() - pmStart });
     check('dbDriver', true, db!.driver.name);
     // Небольшая пауза, чтобы ошибки отрисовки успели попасть в журнал.
     await new Promise((r) => setTimeout(r, 1500));
@@ -397,6 +413,20 @@ async function init(): Promise<void> {
     },
     { desktopNotify: (t, b) => notify(t, b) }
   );
+  passwords = new PasswordStore(db, {
+    clipboard,
+    appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : app.getVersion(),
+    onLock: (reason) => sendEvent(win, { type: 'pm:locked', reason })
+  });
+  const pmTimer = setInterval(() => {
+    if (db) passwords?.tick(db.getSettings().passwords.autoLockMin);
+  }, 15_000);
+  pmTimer.unref?.();
+  const lockOnScreen = () => {
+    if (db && db.getSettings().passwords.lockOnScreenLock) passwords?.lock('screen');
+  };
+  powerMonitor.on('lock-screen', lockOnScreen);
+  powerMonitor.on('suspend', lockOnScreen);
   registerIpc(
     {
       db,
@@ -411,6 +441,7 @@ async function init(): Promise<void> {
       serialBridge,
       localTools,
       monitor,
+      passwords,
       onMonitorSettings: applyBackgroundSettings
     },
     bridge
@@ -443,6 +474,7 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   quitting = true;
   try {
+    passwords?.lock('quit');
     monitor?.stop();
     tray?.destroy();
     tunnels?.stopAll();
