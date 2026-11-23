@@ -90,9 +90,6 @@ function Q(d: SqlDef): CommandInput {
   };
 }
 
-const PG = 'https://www.postgresql.org/docs/current/';
-const MY = 'https://dev.mysql.com/doc/refman/8.0/en/';
-
 export const SQL_COMMANDS: CommandInput[] = [
   // ===================== Подключение =====================
   Q({ id: 'my-connect-user', db: 'mysql', cat: 'sql-connect', basic: true, sh: true, title: 'Войти в MySQL / MariaDB под пользователем', cmd: 'mysql -u app_user -p', tpl: 'mysql -u {{USERNAME}} -p', desc: 'Открывает клиент mysql. Пароль спросит после Enter (его не видно при вводе — это нормально). Выход — exit или \\q. На Debian/Ubuntu администратор входит без пароля: sudo mysql.', diff: 'В MariaDB 11 клиент называется mariadb, команда mysql оставлена как ссылка на него.', tags: ['войти в базу', 'подключиться к mysql', 'клиент mysql'] }),
