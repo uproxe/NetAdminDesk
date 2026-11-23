@@ -153,9 +153,9 @@ const SWITCH_TASKS: SwitchTask[] = [
 ];
 
 let n = 0;
-function step(title: string, command: string, kind: 'switch' | 'linux', note?: string, waitMs?: number): ScenarioStep {
+function step(title: string, command: string, kind: 'switch' | 'linux', note?: string, waitMs?: number, platform?: string): ScenarioStep {
   n++;
-  return { id: `l${n}`, title, command, note, waitMs, risk: classifyCommand(command, kind).level };
+  return { id: `l${n}`, title, command, note, waitMs, risk: classifyCommand(command, kind, platform).level };
 }
 
 function buildSwitchScenarios(): ScenarioInput[] {
@@ -234,7 +234,7 @@ const LINUX_SCENARIOS: ScenarioInput[] = [
 ];
 
 function SW(id: string, p: string, name: string, description: string, steps: [string, string, string?][]): ScenarioInput {
-  return { uid: `builtin:scenario:lib:${id}`, name, description, platforms: [p], steps: steps.map(([t, c, note]) => step(t, c, 'switch', note)), builtin: true, favorite: false };
+  return { uid: `builtin:scenario:lib:${id}`, name, description, platforms: [p], steps: steps.map(([t, c, note]) => step(t, c, 'switch', note, undefined, p)), builtin: true, favorite: false };
 }
 
 /** OSNOVO: сценарии из команд TXT-заметок (синтаксис настройки OSNOVO отличается от Cisco). */
@@ -246,4 +246,24 @@ const OSNOVO_SCENARIOS: ScenarioInput[] = [
   SW('osnovo-security', 'osnovo', 'Отключить Telnet — OSNOVO (по TXT-заметкам)', 'Оставить доступ только по SSH/веб.', [['Отключить Telnet', 'configure terminal\nsecurity-manage telnet disable\nexit', 'Убедитесь, что вы подключены по SSH, а не по Telnet.']])
 ];
 
-export const LIBRARY_SCENARIOS: ScenarioInput[] = [...buildSwitchScenarios(), ...OSNOVO_SCENARIOS, ...LINUX_SCENARIOS];
+/**
+ * UserGate NGFW 7.x: сценарии по документации CLI. Команды режима диагностики (Admin@узел>) идут
+ * отдельными шагами; команды режима конфигурации — в шаге вместе с configure и exit.
+ */
+const UG = 'usergate';
+const UG_REVIEW = ' Синтаксис взят из документации UserGate 7.x и требует проверки на вашей версии.';
+const ugConf = (...lines: string[]) => ['configure', ...lines, 'exit'].join('\n');
+const USERGATE_SCENARIOS: ScenarioInput[] = [
+  SW('ug-overview', UG, 'Обзор межсетевого экрана — UserGate', 'Версия, время, интерфейсы, маршруты и сессии — первое знакомство с устройством. Только просмотр.' + UG_REVIEW, [['Версия ПО', 'show system version'], ['Дата и время', 'date'], ['Интерфейсы', 'show network interface'], ['Маршруты', 'show network route'], ['Активные сессии', 'show system sessions']]),
+  SW('ug-host-down', UG, 'Не открывается узел за межсетевым экраном — UserGate', 'По шагам: маршрут до адреса, ARP, ping с UserGate, соединения и блокировка СОВ. Укажите IP-адрес узла. Только просмотр.' + UG_REVIEW, [['Маршрут до адреса', 'show network route ip {{IP}}'], ['ARP-запись (узел в подключённой сети?)', 'show network arp host {{IP}}', 'Нет записи — узел не отвечает на ARP: выключен, другой VLAN или неверная маска.'], ['Ping с UserGate', 'ping hostname {{IP}} count 4', 'Ping может быть запрещён на самом узле — это не всегда значит, что он недоступен.'], ['Соединения к узлу', 'show traffic connections dest-ip {{IP}}', 'UNREPLIED — запрос ушёл, ответа нет; соединений нет — трафик не доходит до UserGate или запрещён правилом.'], ['Не заблокирован ли СОВ', 'show blocked-ip']]),
+  SW('ug-no-internet', UG, 'Нет интернета у пользователей — UserGate', 'Шлюз, маршрут по умолчанию, DNS и доступ к внешнему сайту с самого межсетевого экрана. Только просмотр.' + UG_REVIEW, [['Маршрут в интернет', 'show network route ip 8.8.8.8'], ['Ping внешнего адреса', 'ping hostname 8.8.8.8 count 4'], ['DNS на UserGate', 'dig hostname ya.ru'], ['Сайт по HTTPS', 'netcheck address https://ya.ru'], ['Трассировка', 'traceroute hostname 8.8.8.8']]),
+  SW('ug-cluster', UG, 'Проверка кластера отказоустойчивости — UserGate', 'Какой узел ведущий, состояние узлов, история переключений. Только просмотр.' + UG_REVIEW, [['Состояние кластера', 'show ha-cluster state'], ['Состояние узлов', 'show ha-cluster tablestat'], ['История переключений', 'show ha-cluster failover']]),
+  SW('ug-blocked', UG, 'Компьютер «пропал» — не заблокирован ли он СОВ — UserGate', 'Проверить таблицу блокировок и при необходимости снять блокировку с адреса. Укажите IP-адрес.' + UG_REVIEW, [['Заблокированные адреса', 'show blocked-ip'], ['Соединения от адреса', 'show traffic connections source-ip {{IP}}'], ['Снять блокировку', 'clear blocked-ip ips [ {{IP}} ]', 'Выполняйте, только если адрес есть в таблице и причина блокировки понятна — иначе он заблокируется снова.']]),
+  SW('ug-mgmt-access', UG, 'Проверить доступ к управлению (зоны) — UserGate', 'Какие службы разрешены в зонах: веб-консоль, CLI по SSH, SNMP, ping. Только просмотр.' + UG_REVIEW, [['Зоны и службы', ugConf('show network zone')], ['Интерфейсы и их зоны', ugConf('show network interface adapter')]]),
+  SW('ug-snmp-check', UG, 'Проверить SNMP для мониторинга — UserGate', 'Правила SNMP (опрос и трапы), параметры агента и разрешение службы SNMP в зонах — для раздела «Мониторинг». Только просмотр.' + UG_REVIEW, [['Правила SNMP', ugConf('show monitoring snmp')], ['Параметры агента', ugConf('show monitoring snmp-parameter')], ['Служба SNMP в зонах', ugConf('show network zone')]]),
+  SW('ug-firewall-review', UG, 'Посмотреть правила межсетевого экрана и NAT — UserGate', 'Все правила в порядке применения. Только просмотр.' + UG_REVIEW, [['Правила межсетевого экрана', ugConf('show network-policy firewall all')], ['Правила NAT и маршрутизации', ugConf('show network-policy nat-routing all')]]),
+  SW('ug-trace', UG, 'Куда попадает трафик узла (трассировка по правилам) — UserGate', 'Создаёт правило трассировки для адреса, показывает пакеты и удаляет правило. Укажите IP-адрес. Остановить вывод трассировки — Ctrl+C.' + UG_REVIEW, [['Создать правило трассировки', ugConf('create network trace-rules enabled on name "NAD trace" source-ip-addresses [ {{IP}} ]')], ['Смотреть пакеты (Ctrl+C — стоп)', 'show network trace', 'Вывод идёт, пока не нажать Ctrl+C в терминале.'], ['Удалить правило трассировки', ugConf('delete network trace-rules "NAD trace"')]]),
+  SW('ug-time', UG, 'Синхронизация времени — UserGate', 'Включить NTP и задать сервер времени. Укажите адрес NTP-сервера.' + UG_REVIEW, [['Время сейчас', 'date'], ['Включить NTP и задать сервер', ugConf('set settings general server-time ntp-enabled on', 'set settings general server-time primary-ntp-server {{HOST}}')], ['Проверить', 'date']])
+];
+
+export const LIBRARY_SCENARIOS: ScenarioInput[] = [...buildSwitchScenarios(), ...OSNOVO_SCENARIOS, ...USERGATE_SCENARIOS, ...LINUX_SCENARIOS];

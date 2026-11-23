@@ -21,7 +21,7 @@ import type { ScenarioInput } from '../src/shared/types';
 /** Встроенные сценарии: базовые и библиотека типовых задач. */
 export const BUILTIN_SCENARIOS: ScenarioInput[] = [...BASE_SCENARIOS, ...LIBRARY_SCENARIOS];
 export { GUIDES, GUIDE_SECTIONS } from './guides/index';
-export { builtinProfiles, SWITCH_TASKS, MAC_TABLE_DUMP, NEIGHBOR_COMMANDS } from './profiles';
+export { builtinProfiles, SWITCH_TASKS, MAC_TABLE_DUMP, NEIGHBOR_COMMANDS, tasksFor } from './profiles';
 
 /** Версия встроенных данных: при увеличении встроенные записи обновляются (кроме изменённых пользователем). */
 export const SEED_VERSION = 4;

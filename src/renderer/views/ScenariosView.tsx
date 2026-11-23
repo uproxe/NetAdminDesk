@@ -167,7 +167,7 @@ function ScenarioEditor({ draft, onCancel, onSaved }: { draft: ScenarioInput; on
   const [s, setS] = useState<ScenarioInput>(draft);
   const kind: 'switch' | 'linux' = s.platforms.includes('linux') ? 'linux' : 'switch';
   const setStep = (i: number, patch: Partial<ScenarioStep>) =>
-    setS((x) => ({ ...x, steps: x.steps.map((st, j) => (j === i ? { ...st, ...patch, risk: patch.command !== undefined ? classifyCommand(patch.command, kind).level : st.risk } : st)) }));
+    setS((x) => ({ ...x, steps: x.steps.map((st, j) => (j === i ? { ...st, ...patch, risk: patch.command !== undefined ? classifyCommand(patch.command, kind, x.platforms[0]).level : st.risk } : st)) }));
   const move = (i: number, d: number) =>
     setS((x) => {
       const steps = [...x.steps];
@@ -324,7 +324,7 @@ function ScenarioRunner({ s, onClose }: { s: Scenario; onClose: () => void }) {
       try {
         let out = '';
         for (const line of cmd.split('\n').filter((l) => l.trim())) {
-          const r = await api.ssh.capture(sess.id, line, { timeoutMs: 90000 }, { source: 'scenario', risk: classifyCommand(line, kind).level, note: `${s.name}: ${st.title}` });
+          const r = await api.ssh.capture(sess.id, line, { timeoutMs: 90000 }, { source: 'scenario', risk: classifyCommand(line, kind, sess.platform).level, note: `${s.name}: ${st.title}` });
           out += `${out ? '\n' : ''}${r.output}${r.timedOut ? '\n[превышено время ожидания]' : ''}`;
         }
         setStates((m) => ({ ...m, [key]: replaceAt(m[key], i, { status: 'done', output: out }) }));

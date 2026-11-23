@@ -8,6 +8,8 @@ export interface SwitchTask {
   title: string;
   params: string[];
   description: string;
+  /** Задача только для этих платформ (например, межсетевого экрана UserGate). */
+  only?: string[];
 }
 
 export const SWITCH_TASKS: SwitchTask[] = [
@@ -36,8 +38,18 @@ export const SWITCH_TASKS: SwitchTask[] = [
   { id: 'cpu-check', title: 'Проверить загрузку процессора', params: [], description: 'Высокая загрузка CPU — признак шторма, петли или атаки.' },
   { id: 'time-check', title: 'Проверить время и синхронизацию', params: [], description: 'Время на устройстве и состояние NTP/SNTP.' },
   { id: 'sessions', title: 'Кто подключён к коммутатору', params: [], description: 'Активные сеансы управления (SSH, Telnet, консоль).' },
-  { id: 'config-view', title: 'Посмотреть текущую конфигурацию', params: [], description: 'Действующая конфигурация целиком.' }
+  { id: 'config-view', title: 'Посмотреть текущую конфигурацию', params: [], description: 'Действующая конфигурация целиком.' },
+  { id: 'route-check', title: 'Куда идёт трафик к адресу (маршрут)', params: ['IP'], description: 'Какой маршрут и шлюз межсетевой экран выберет для адреса.', only: ['usergate'] },
+  { id: 'host-reach', title: 'Доступен ли адрес с межсетевого экрана', params: ['HOST'], description: 'Ping и трассировка с самого межсетевого экрана: виден ли узел из его сети.', only: ['usergate'] },
+  { id: 'connections', title: 'Соединения к адресу и от него', params: ['IP'], description: 'Записи таблицы соединений: есть ли трафик, установлено ли соединение (ASSURED) или нет ответа (UNREPLIED).', only: ['usergate'] },
+  { id: 'blocked-ip', title: 'Адреса, заблокированные СОВ', params: [], description: 'Таблица IP-адресов, временно заблокированных системой обнаружения вторжений.', only: ['usergate'] },
+  { id: 'cluster-check', title: 'Состояние кластера (HA)', params: [], description: 'Какой узел ведущий, состояние узлов и история переключений.', only: ['usergate'] }
 ];
+
+/** Задачи, доступные для платформы. */
+export function tasksFor(platform: string, hasProfile: (task: string) => boolean, onlyProfiled = false): SwitchTask[] {
+  return SWITCH_TASKS.filter((t) => (!t.only || t.only.includes(platform)) && (!onlyProfiled || hasProfile(t.id)));
+}
 
 const u = (command: string, note?: string): DiagnosticProfileStep => ({ command, note, fromUserTxt: true });
 const d = (command: string, note?: string): DiagnosticProfileStep => ({ command, note });
@@ -158,6 +170,17 @@ const MAP: ProfileMap = {
     'mac-find': [x('show mac address-table address {{MAC}}')],
     'vlan-check': [x('show vlan id {{VLAN}}')],
     'hw-info': [x('show system-info')]
+  },
+  // UserGate NGFW 7.x: команды режима диагностики (Admin@узел>) по документации производителя.
+  usergate: {
+    'port-status': [x('show network interface')],
+    'port-config': [x('show network interface {{INTERFACE}} type info')],
+    'port-counters': [x('show network interface {{INTERFACE}} type statistics')],
+    'port-errors': [x('show network interface {{INTERFACE}} type statistics', 'ошибки и отбросы — в статистике интерфейса')],
+    'arp-ip': [x('show network arp host {{IP}}')],
+    neighbors: [x('show lldp neighbors', 'нужен включённый профиль LLDP на интерфейсах')],
+    'hw-info': [x('show system version')],
+    system: [x('show system version'), x('date')]
   }
 };
 
@@ -265,6 +288,15 @@ const EXTRA: ProfileMap = {
     'port-macs': [x('show mac address-table interface gigabitEthernet {{INTERFACE}}')],
     'vlan-list': [x('show vlan')],
     'config-view': [x('show running-config')]
+  },
+  usergate: {
+    'ports-overview': [x('show network interface')],
+    'time-check': [x('date')],
+    'route-check': [x('show network route ip {{IP}}')],
+    'host-reach': [x('ping hostname {{HOST}} count 4', 'без count ping не остановится сам'), x('traceroute hostname {{HOST}}')],
+    connections: [x('show traffic connections dest-ip {{IP}}'), x('show traffic connections source-ip {{IP}}')],
+    'blocked-ip': [x('show blocked-ip')],
+    'cluster-check': [x('show ha-cluster state'), x('show ha-cluster tablestat'), x('show ha-cluster failover')]
   }
 };
 

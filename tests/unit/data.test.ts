@@ -123,3 +123,20 @@ test('руководства: платформы блоков кода изве�
   assert.deepEqual(splitRow('| порт занят | `ss -tlnp | grep 3306` | x |'), ['порт занят', '`ss -tlnp | grep 3306`', 'x']);
   assert.ok(GUIDES.filter((g) => g.section === 'db').length >= 8);
 });
+
+test('UserGate: справочник, сценарии и профиль диагностики', () => {
+  const ug = BUILTIN_COMMANDS.filter((c) => c.platform === 'usergate');
+  assert.ok(ug.length >= 60, `команд UserGate ${ug.length}`);
+  // записи по документации, на оборудовании не проверены — все помечены «Требует проверки»
+  assert.ok(ug.every((c) => c.needsReview && !c.verified));
+  assert.ok(ug.filter((c) => c.risk === 'info').length >= 40);
+  const sc = BUILTIN_SCENARIOS.filter((s) => s.platforms.includes('usergate'));
+  assert.ok(sc.length >= 8);
+  const profiles = builtinProfiles().filter((p) => p.platform === 'usergate');
+  for (const t of ['route-check', 'connections', 'blocked-ip', 'cluster-check', 'port-status']) assert.ok(profiles.some((p) => p.task === t), t);
+  // задачи только для UserGate не предлагаются коммутаторам
+  assert.ok(SWITCH_TASKS.filter((t) => t.only).every((t) => t.only!.includes('usergate')));
+  const p = PLATFORMS.find((x) => x.id === 'usergate')!;
+  assert.equal(p.sshPort, 2200);
+  assert.equal(p.defaultUser, 'Admin');
+});

@@ -5,7 +5,7 @@ import { useApp, errMsg, type OpenSession } from '../lib/store';
 import * as terms from '../lib/terminals';
 import { Banner, Button, Check, Empty, Field, Tabs } from '../components/ui';
 import { TemplateFill } from '../components/ExecuteDialog';
-import { SWITCH_TASKS, MAC_TABLE_DUMP, NEIGHBOR_COMMANDS } from '../../../data/profiles';
+import { SWITCH_TASKS, MAC_TABLE_DUMP, NEIGHBOR_COMMANDS, tasksFor } from '../../../data/profiles';
 import { LINUX_TASKS, LINUX_TASK_GROUPS, checkById, compareMetrics, linuxTaskGroup } from '../../shared/linuxDiag';
 import { getPlatform, PLATFORMS } from '../../shared/platforms';
 import { classifyCommand } from '../../shared/risk';
@@ -141,6 +141,11 @@ function SwitchDiag() {
   const [prev, setPrev] = useState<DiagnosticResult | null>(null);
   const sess = app.sessionByKey(key);
   const platform = sess?.platform ?? '';
+  const tasks = tasksFor(platform, (id) => app.profiles.some((p) => p.platform === platform && p.task === id), getPlatform(platform).diagOnlyProfiled);
+  // При смене устройства задача может оказаться недоступной (например, PoE для межсетевого экрана)
+  useEffect(() => {
+    if (tasks.length && !tasks.some((x) => x.id === task)) setTask(tasks[0].id);
+  }, [platform]);
   const profile = app.profiles.find((p) => p.platform === platform && p.task === task);
   const t = SWITCH_TASKS.find((x) => x.id === task)!;
   const tpl = (profile?.steps ?? []).map((s) => s.command).join('\n');
@@ -158,7 +163,7 @@ function SwitchDiag() {
       if (pager) for (const c of p.pagerOff) await api.ssh.capture(sess.id, c, { timeoutMs: 6000, idleMs: 800 }, { source: 'diagnostic', risk: 'info' });
       for (const step of profile.steps) {
         const cmd = renderTemplate(step.command, values, { platform, custom: app.templateParams }).text;
-        const risk = classifyCommand(cmd, 'switch').level;
+        const risk = classifyCommand(cmd, 'switch', platform).level;
         if (risk !== 'info' && !(await app.confirm({ title: 'Команда не только для просмотра', text: <pre className="output">{cmd}</pre>, okText: 'Выполнить' }))) continue;
         const r = await api.ssh.capture(sess.id, cmd, { timeoutMs: 90000 }, { source: 'diagnostic', risk, note: t.title });
         const problem = outputProblem(r.output);
@@ -190,7 +195,7 @@ function SwitchDiag() {
       {!sess && (
         <TaskOverview
           text="Подключитесь к коммутатору (или выберите открытую сессию). Команды для каждой задачи берутся из профиля платформы устройства — в основном из TXT-заметок; профили можно изменить на вкладке «Профили платформ». Перед запуском показываются все команды, изменяющие команды отдельно подтверждаются."
-          items={SWITCH_TASKS.map((x) => ({ id: x.id, title: x.title, description: x.description }))}
+          items={SWITCH_TASKS.filter((x) => !x.only).map((x) => ({ id: x.id, title: x.title, description: x.description }))}
         />
       )}
       {sess && (
@@ -199,7 +204,7 @@ function SwitchDiag() {
             <h3>Сценарий диагностики</h3>
             <Field label="Задача">
               <select className="select" value={task} onChange={(e) => (setTask(e.target.value), setReport(null))}>
-                {SWITCH_TASKS.map((x) => (
+                {tasks.map((x) => (
                   <option key={x.id} value={x.id}>
                     {x.title}
                   </option>
@@ -596,7 +601,7 @@ function ProfilesEditor() {
           ))}
         </select>
       </Field>
-      {SWITCH_TASKS.map((t) => (
+      {tasksFor(platform, () => true).map((t) => (
         <ProfileRow key={`${platform}:${t.id}`} platform={platform} taskId={t.id} title={t.title} onSaved={() => void app.refresh('profiles')} />
       ))}
     </>
@@ -615,7 +620,7 @@ function ProfileRow({ platform, taskId, title, onSaved }: { platform: string; ta
       .map((l) => l.trim())
       .filter(Boolean)
       .map((command) => ({ command, ...(p?.steps.find((s) => s.command === command) ?? {}) }));
-    const risky = steps.filter((s) => classifyCommand(s.command, 'switch').level !== 'info');
+    const risky = steps.filter((s) => classifyCommand(s.command, 'switch', platform).level !== 'info');
     if (risky.length && !(await app.confirm({ title: 'Изменяющие команды в профиле', text: `Профили диагностики должны содержать только команды просмотра. Найдено: ${risky.map((r) => r.command).join('; ')}`, okText: 'Сохранить всё равно', danger: true }))) return;
     await api.profiles.save({ platform, task: taskId, steps });
     onSaved();
