@@ -3,7 +3,7 @@
 # Файл сохраняется лишь тогда, когда его контрольная сумма совпала со значением, зашитым в установщик при сборке.
 #
 # Коды выхода: 0 — скачан и проверен; 2 — не удалось скачать; 3 — контрольная сумма не совпала (файл удалён);
-#              4 — неверные параметры.
+#              4 — неверные параметры; 5 — непредвиденная ошибка (текст — в журнале).
 # -Log — журнал (дописывается), чтобы причину было видно и при тихой установке.
 param(
   [Parameter(Mandatory = $true)][string]$Url,
@@ -25,6 +25,18 @@ function Remove-Download {
   if (Test-Path -LiteralPath $Out) { Remove-Item -LiteralPath $Out -Force -ErrorAction SilentlyContinue }
 }
 
+# Любая непредвиденная ошибка — в журнал с текстом, а не молчаливый код 1
+trap {
+  Say ('Непредвиденная ошибка: ' + $_.Exception.Message)
+  Remove-Download
+  exit 5
+}
+
+# Только встроенные средства .NET и базовые команды: Get-FileHash и другие команды из модулей-сценариев
+# не используются — при запуске из PowerShell 7 Windows PowerShell 5.1 наследует чужие пути модулей
+# (PSModulePath) и не может их загрузить.
+Say ('PowerShell {0}, {1}-битный' -f $PSVersionTable.PSVersion, $(if ([Environment]::Is64BitProcess) { 64 } else { 32 }))
+
 if ($Url -notmatch '^https://') { Say 'Адрес загрузки должен начинаться с https://'; exit 4 }
 if ($Sha256 -notmatch '^[0-9a-fA-F]{64}$') { Say 'Неверная контрольная сумма в установщике'; exit 4 }
 
@@ -38,6 +50,7 @@ $limit = if ($ExpectedBytes -gt 0) { $ExpectedBytes * 2 } else { 1GB }
 
 Remove-Download
 $resp = $null; $in = $null; $fs = $null
+$sha = [Security.Cryptography.SHA256]::Create()
 try {
   $req = [Net.WebRequest]::Create($Url)
   $req.UserAgent = 'NetAdminDesk-Setup'
@@ -54,6 +67,7 @@ try {
   $nextPct = 10
   while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
     $fs.Write($buf, 0, $n)
+    [void]$sha.TransformBlock($buf, 0, $n, $null, 0)
     $done += $n
     if ($done -gt $limit) { throw 'файл намного больше ожидаемого' }
     if ($total -gt 0) {
@@ -76,7 +90,8 @@ try {
 $in.Close()
 $resp.Close()
 
-$actual = (Get-FileHash -LiteralPath $Out -Algorithm SHA256).Hash
+[void]$sha.TransformFinalBlock((New-Object byte[] 0), 0, 0)
+$actual = -join ($sha.Hash | ForEach-Object { $_.ToString('x2') })
 if ($actual -ne $Sha256) {
   Remove-Download
   Say ('Контрольная сумма не совпала: ожидалась {0}, получена {1}' -f $Sha256.ToLowerInvariant(), $actual.ToLowerInvariant())
