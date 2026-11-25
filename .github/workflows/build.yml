@@ -108,14 +108,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macOS собирается отдельным заданием package-mac: релиз его не ждёт
           - name: Windows x64
             os: windows-latest
             builder: --win nsis --x64
             artifact: NetAdminDesk-Windows-x64-Setup.exe
-          - name: macOS Universal
-            os: macos-latest
-            builder: --mac dmg --universal
-            artifact: NetAdminDesk-macOS-Universal.dmg
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -248,23 +245,6 @@ jobs:
           name: installer-screenshots
           path: ${{ runner.temp }}/installer-*.png
           if-no-files-found: ignore
-      - name: Самопроверка (macOS, приложение из .dmg)
-        timeout-minutes: 8
-        if: runner.os == 'macOS'
-        run: |
-          MNT=$(hdiutil attach -nobrowse -readonly "release/${{ matrix.artifact }}" | awk -F'\t' '/\/Volumes\//{print $NF}' | tail -1)
-          echo "Смонтировано: $MNT"
-          cp -R "$MNT/NetAdmin Desk.app" "$RUNNER_TEMP/"
-          hdiutil detach "$MNT"
-          APP="$RUNNER_TEMP/NetAdmin Desk.app"
-          echo "Архитектуры:"; lipo -archs "$APP/Contents/MacOS/NetAdmin Desk"
-          lipo -archs "$APP/Contents/MacOS/NetAdmin Desk" | grep -q x86_64
-          lipo -archs "$APP/Contents/MacOS/NetAdmin Desk" | grep -q arm64
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          export NETADMIN_DESK_DATA="$RUNNER_TEMP/nad-data" NAD_SMOKE_OUT="$RUNNER_TEMP/smoke.json"
-          "$APP/Contents/MacOS/NetAdmin Desk" --smoke-test
-          cat "$NAD_SMOKE_OUT"
-
       - name: Контрольная сумма
         shell: bash
         run: |
@@ -277,6 +257,60 @@ jobs:
           path: |
             release/${{ matrix.artifact }}
             release/${{ matrix.artifact }}.sha256
+          if-no-files-found: error
+
+  # macOS — отдельно: GitHub часто подолгу не выделяет машину macOS (с ноября 2026), поэтому релиз
+  # публикуется без него, а .dmg добавляет задание release-mac, когда эта сборка пройдёт
+  # (сама при автоматическом перезапуске или после «Re-run failed jobs»).
+  package-mac:
+    name: Установщик macOS Universal
+    needs: test
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      ARTIFACT: NetAdminDesk-macOS-Universal.dmg
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: ${{ env.NPM_INSTALL }}
+      - run: npm run build
+      - name: Сборка установщика
+        run: npx electron-builder --mac dmg --universal --publish never
+        env:
+          # Автоматический поиск сертификатов отключён: сборка без подписи разработчика.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Проверка имени файла
+        run: |
+          ls -la release
+          test -f "release/$ARTIFACT"
+      - name: Самопроверка (приложение из .dmg)
+        timeout-minutes: 8
+        run: |
+          MNT=$(hdiutil attach -nobrowse -readonly "release/$ARTIFACT" | awk -F'\t' '/\/Volumes\//{print $NF}' | tail -1)
+          echo "Смонтировано: $MNT"
+          cp -R "$MNT/NetAdmin Desk.app" "$RUNNER_TEMP/"
+          hdiutil detach "$MNT"
+          APP="$RUNNER_TEMP/NetAdmin Desk.app"
+          echo "Архитектуры:"; lipo -archs "$APP/Contents/MacOS/NetAdmin Desk"
+          lipo -archs "$APP/Contents/MacOS/NetAdmin Desk" | grep -q x86_64
+          lipo -archs "$APP/Contents/MacOS/NetAdmin Desk" | grep -q arm64
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          export NETADMIN_DESK_DATA="$RUNNER_TEMP/nad-data" NAD_SMOKE_OUT="$RUNNER_TEMP/smoke.json"
+          "$APP/Contents/MacOS/NetAdmin Desk" --smoke-test
+          cat "$NAD_SMOKE_OUT"
+      - name: Контрольная сумма
+        run: |
+          cd release
+          shasum -a 256 "$ARTIFACT" > "$ARTIFACT.sha256"
+          cat "$ARTIFACT.sha256"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: NetAdminDesk-macOS-Universal.dmg
+          path: |
+            release/NetAdminDesk-macOS-Universal.dmg
+            release/NetAdminDesk-macOS-Universal.dmg.sha256
           if-no-files-found: error
 
   package-linux:
@@ -367,6 +401,8 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
       - name: Версия и тег
@@ -405,6 +441,11 @@ jobs:
             echo
             echo '**Установщики:** Windows x64 (`.exe`), macOS Universal — Intel и Apple Silicon (`.dmg`).'
             echo
+            if [ ! -f dist-release/NetAdminDesk-macOS-Universal.dmg ]; then
+              # Строку уберёт задание release-mac, когда добавит .dmg
+              echo '**macOS:** установщик появится в этом релизе позже — его сборка ждёт свободную машину GitHub.'
+              echo
+            fi
             echo '**Linux amd64:** `.deb` — Debian, Ubuntu, Mint, Astra Linux; `.rpm` — Fedora, RHEL, Rocky, Alma, openSUSE, РЕД ОС, РОСА; `.pacman` — Arch, Manjaro; `.AppImage` — любой дистрибутив без установки. Рядом с каждым файлом — `.sha256` с контрольной суммой.'
             echo
             echo 'Сборки не подписаны сертификатами разработчика: Windows SmartScreen и macOS Gatekeeper покажут предупреждение при первом запуске — как запустить, см. [docs/BUILD.md](https://github.com/${{ github.repository }}/blob/${{ steps.ver.outputs.tag }}/docs/BUILD.md#неподписанные-сборки).'
@@ -421,3 +462,36 @@ jobs:
           prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
           fail_on_unmatched_files: true
           files: dist-release/*
+
+  release-mac:
+    name: Установщик macOS — в релиз
+    # Запускается, когда опубликован релиз и прошла сборка macOS — в том числе после «Re-run failed jobs»
+    needs: [release, package-mac]
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: VERSION
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@v6
+        with:
+          name: NetAdminDesk-macOS-Universal.dmg
+          path: mac
+      - name: Добавить .dmg в релиз
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="v$(tr -d ' \r\n' < VERSION)"; fi
+          ls -la mac
+          gh release upload "$TAG" mac/NetAdminDesk-macOS-Universal.dmg mac/NetAdminDesk-macOS-Universal.dmg.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          if grep -q '^\*\*macOS:\*\* установщик появится' notes.md; then
+            grep -v '^\*\*macOS:\*\* установщик появится' notes.md > notes-new.md
+            gh release edit "$TAG" --notes-file notes-new.md --repo "$GITHUB_REPOSITORY"
+          fi
+          echo "Установщик macOS добавлен в релиз $TAG"

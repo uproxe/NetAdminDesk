@@ -16,11 +16,25 @@ MAX_ATTEMPTS="${MAX_ATTEMPTS:-4}" # первая попытка и до трёх
 
 BAD='.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out"'
 
+# Запрос к API GitHub с повторами: кратковременный сбой связи не должен обрывать перезапуск
+api() {
+  local i out
+  for i in 1 2 3 4 5; do
+    if out="$(gh api "$@" 2>/tmp/gh-api.err)"; then
+      printf '%s' "$out"
+      return 0
+    fi
+    echo "Сбой запроса к GitHub ($i из 5): $(tr '\n' ' ' </tmp/gh-api.err)" >&2
+    sleep 20
+  done
+  return 1
+}
+
 jobs_json() {
   if [ -n "${ATTEMPT:-}" ]; then
-    gh api "repos/$REPO/actions/runs/$RUN/attempts/$ATTEMPT/jobs?per_page=100"
+    api "repos/$REPO/actions/runs/$RUN/attempts/$ATTEMPT/jobs?per_page=100"
   else
-    gh api "repos/$REPO/actions/runs/$RUN/jobs?filter=latest&per_page=100"
+    api "repos/$REPO/actions/runs/$RUN/jobs?filter=latest&per_page=100"
   fi
 }
 
@@ -43,13 +57,13 @@ while :; do
   # Дождаться окончания запуска (в том числе после перезапуска)
   status=""
   for _ in $(seq 1 90); do
-    status="$(gh api "repos/$REPO/actions/runs/$RUN" --jq .status)"
+    status="$(api "repos/$REPO/actions/runs/$RUN" --jq .status)"
     [ "$status" = completed ] && break
     sleep 60
   done
   [ "$status" = completed ] || { echo "Запуск не закончился за полтора часа — выхожу."; exit 0; }
 
-  read -r conclusion attempt < <(gh api "repos/$REPO/actions/runs/$RUN" --jq '"\(.conclusion) \(.run_attempt)"')
+  read -r conclusion attempt < <(api "repos/$REPO/actions/runs/$RUN" --jq '"\(.conclusion) \(.run_attempt)"')
   echo "Запуск $RUN, попытка $attempt: $conclusion"
   case "$conclusion" in
     success) echo "Всё прошло."; exit 0 ;;
@@ -68,6 +82,6 @@ while :; do
   fi
   echo "Задачам не досталась машина GitHub — перезапускаю (попытка $((attempt + 1)) из $MAX_ATTEMPTS)."
   [ -n "${DRY_RUN:-}" ] && exit 0
-  gh api -X POST "repos/$REPO/actions/runs/$RUN/rerun-failed-jobs" >/dev/null
+  api -X POST "repos/$REPO/actions/runs/$RUN/rerun-failed-jobs" >/dev/null
   sleep 30
 done
