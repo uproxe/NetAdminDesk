@@ -9,7 +9,14 @@ on:
     branches: [main, master]
     tags: ['v*']
   pull_request:
+  # Кнопка «Run workflow» во вкладке Actions. С галочкой «release» — выпуск релиза без git на компьютере:
+  # после всех проверок создаётся тег v<версия из VERSION> на этом коммите и публикуется релиз.
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Выпустить релиз: создать тег v<версия из файла VERSION> и опубликовать установщики'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,6 +33,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+      - name: Можно ли выпускать релиз (только для кнопки «Выпустить релиз»)
+        if: github.event_name == 'workflow_dispatch' && inputs.release
+        run: |
+          # Проверяется сразу, чтобы не ждать сборок ради ошибки
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::Релиз выпускается только из ветки main"; exit 1; }
+          VERSION="$(tr -d ' \r\n' < VERSION)"
+          PKG="$(node -p "require('./package.json').version")"
+          [ "$VERSION" = "$PKG" ] || { echo "::error::Версия в VERSION ($VERSION) и в package.json ($PKG) не совпадает"; exit 1; }
+          grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "::error::В CHANGELOG.md нет раздела [$VERSION]"; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::Тег v$VERSION уже есть — эта версия уже выпущена. Поднимите версию в VERSION, package.json и CHANGELOG.md."
+            exit 1
+          fi
+          echo "Будет выпущен релиз v$VERSION из коммита $GITHUB_SHA"
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -171,6 +192,28 @@ jobs:
           if (-not (Test-Path (Join-Path $dir 'netloom.exe'))) { throw "Нет $dir\netloom.exe" }
           Write-Host "NetLoom $got установлен в $dir"
           if (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'Programs\NetAdmin Desk\NetAdmin Desk.exe'))) { throw 'NetAdmin Desk пропал после повторной установки' }
+      - name: Удаление программы удаляет данные, а обновление — нет
+        timeout-minutes: 10
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:APPDATA 'NetAdmin Desk'
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\NetAdmin Desk'
+          New-Item -ItemType Directory -Force -Path (Join-Path $data 'backups') | Out-Null
+          Set-Content -Path (Join-Path $data 'netadmin.db') -Value 'проверка'
+          # Повторная установка поверх — как обновление: старый деинсталлятор идёт с --updated, данные остаются
+          $p = Start-Process -FilePath "release\${{ matrix.artifact }}" -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Установщик завершился с кодом $($p.ExitCode)" }
+          if (-not (Test-Path (Join-Path $data 'netadmin.db'))) { throw 'Повторная установка удалила данные — так быть не должно' }
+          Write-Host 'Повторная установка данные сохранила.'
+          $un = Get-ChildItem $dir -Filter 'Uninstall*.exe' | Select-Object -First 1
+          if (-not $un) { throw "Нет деинсталлятора в $dir" }
+          # _?= — деинсталлятор работает на месте и не возвращает управление раньше времени
+          $p = Start-Process -FilePath $un.FullName -ArgumentList '/S', "_?=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Деинсталлятор завершился с кодом $($p.ExitCode)" }
+          if (Test-Path $data) { Get-ChildItem $data -Recurse | Select-Object -First 10 FullName; throw 'Данные остались после удаления программы' }
+          if (Test-Path (Join-Path $dir 'NetAdmin Desk.exe')) { throw 'Программа не удалилась' }
+          Write-Host 'Удаление программы удалило и её данные.'
       - name: Снимок шага «Дополнительно» (для просмотра)
         timeout-minutes: 5
         if: runner.os == 'Windows'
@@ -314,14 +357,28 @@ jobs:
             "${{ matrix.image }}" bash /ci/ci-linux-install.sh "${{ matrix.format }}"
 
   release:
-    name: Публикация релиза (только для тегов v*)
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Публикация релиза (тег v* или кнопка «Выпустить релиз»)
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release && github.ref == 'refs/heads/main')
     needs: [package, package-linux, linux-install, ssh-integration]
     runs-on: ubuntu-24.04
+    # Два запуска кнопки подряд не выпустят релиз дважды
+    concurrency:
+      group: release
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v5
+      - name: Версия и тег
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="v$(tr -d ' \r\n' < VERSION)"; fi
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Тег $TAG уже есть — эта версия уже выпущена"; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Релиз $TAG, коммит $GITHUB_SHA"
       - uses: actions/download-artifact@v6
         with:
           path: dist-release
@@ -331,7 +388,7 @@ jobs:
       - run: ls -la dist-release
       - name: Текст релиза из CHANGELOG.md
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ steps.ver.outputs.version }}"
           # Раздел «## [X.Y.Z] — дата» до следующего заголовка версии
           awk -v v="$VERSION" '
             index($0, "## [" v "]") == 1 { found = 1; next }
@@ -350,14 +407,17 @@ jobs:
             echo
             echo '**Linux amd64:** `.deb` — Debian, Ubuntu, Mint, Astra Linux; `.rpm` — Fedora, RHEL, Rocky, Alma, openSUSE, РЕД ОС, РОСА; `.pacman` — Arch, Manjaro; `.AppImage` — любой дистрибутив без установки. Рядом с каждым файлом — `.sha256` с контрольной суммой.'
             echo
-            echo 'Сборки не подписаны сертификатами разработчика: Windows SmartScreen и macOS Gatekeeper покажут предупреждение при первом запуске — как запустить, см. [docs/BUILD.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/BUILD.md#неподписанные-сборки).'
+            echo 'Сборки не подписаны сертификатами разработчика: Windows SmartScreen и macOS Gatekeeper покажут предупреждение при первом запуске — как запустить, см. [docs/BUILD.md](https://github.com/${{ github.repository }}/blob/${{ steps.ver.outputs.tag }}/docs/BUILD.md#неподписанные-сборки).'
           } >> release-notes.md
           cat release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
-          name: NetAdmin Desk ${{ github.ref_name }}
+          # Для кнопки тег создаётся здесь, на собранном коммите (тег от GITHUB_TOKEN не запускает сборку повторно)
+          tag_name: ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: NetAdmin Desk ${{ steps.ver.outputs.tag }}
           body_path: release-notes.md
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
           fail_on_unmatched_files: true
           files: dist-release/*
