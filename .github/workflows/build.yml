@@ -4,19 +4,29 @@
 # Подписи сертификатами разработчика нет — см. docs/BUILD.md.
 name: build
 
+# Название запуска в списке Actions: для выпуска — «Выпуск релиза vX.Y.Z», для обычной проверки —
+# заголовок коммита (пустое значение = название по умолчанию).
+run-name: >-
+  ${{ inputs.version && format('Выпуск релиза v{0}', inputs.version)
+  || startsWith(github.ref, 'refs/tags/v') && format('Выпуск релиза {0}', github.ref_name)
+  || github.event_name == 'workflow_dispatch' && 'Проверка вручную'
+  || '' }}
+
 on:
   push:
-    branches: [main, master]
+    # dev — рабочая ветка: изменения проверяются в ней, а в main попадают одним коммитом на версию
+    branches: [main, master, dev]
     tags: ['v*']
   pull_request:
-  # Кнопка «Run workflow» во вкладке Actions. С галочкой «release» — выпуск релиза без git на компьютере:
-  # после всех проверок создаётся тег v<версия из VERSION> на этом коммите и публикуется релиз.
+  # Кнопка «Run workflow» во вкладке Actions. С номером версии — выпуск релиза без git на компьютере:
+  # ничего не собирается заново — берутся готовые установщики из зелёной проверки этого коммита в main.
   workflow_dispatch:
     inputs:
-      release:
-        description: 'Выпустить релиз: создать тег v<версия из файла VERSION> и опубликовать установщики'
-        type: boolean
-        default: false
+      version:
+        description: 'Выпустить релиз: впишите номер версии из файла VERSION (например, 1.5.0). Пусто — просто проверка.'
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -30,23 +40,11 @@ env:
 jobs:
   test:
     name: Тесты (Linux)
+    # При выпуске релиза ничего не собирается заново
+    if: ${{ !inputs.version && !startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - name: Можно ли выпускать релиз (только для кнопки «Выпустить релиз»)
-        if: github.event_name == 'workflow_dispatch' && inputs.release
-        run: |
-          # Проверяется сразу, чтобы не ждать сборок ради ошибки
-          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::Релиз выпускается только из ветки main"; exit 1; }
-          VERSION="$(tr -d ' \r\n' < VERSION)"
-          PKG="$(node -p "require('./package.json').version")"
-          [ "$VERSION" = "$PKG" ] || { echo "::error::Версия в VERSION ($VERSION) и в package.json ($PKG) не совпадает"; exit 1; }
-          grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "::error::В CHANGELOG.md нет раздела [$VERSION]"; exit 1; }
-          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
-            echo "::error::Тег v$VERSION уже есть — эта версия уже выпущена. Поднимите версию в VERSION, package.json и CHANGELOG.md."
-            exit 1
-          fi
-          echo "Будет выпущен релиз v$VERSION из коммита $GITHUB_SHA"
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -70,6 +68,8 @@ jobs:
 
   ssh-integration:
     name: SSH против OpenSSH (docker)
+    # При выпуске релиза ничего не собирается заново
+    if: ${{ !inputs.version && !startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     env:
       NAD_SSH_HOST: 127.0.0.1
@@ -103,6 +103,8 @@ jobs:
 
   package:
     name: Установщик ${{ matrix.name }}
+    # При выпуске релиза ничего не собирается заново
+    if: ${{ !inputs.version && !startsWith(github.ref, 'refs/tags/v') }}
     needs: test
     strategy:
       fail-fast: false
@@ -259,11 +261,12 @@ jobs:
             release/${{ matrix.artifact }}.sha256
           if-no-files-found: error
 
-  # macOS — отдельно: GitHub часто подолгу не выделяет машину macOS (с ноября 2026), поэтому релиз
-  # публикуется без него, а .dmg добавляет задание release-mac, когда эта сборка пройдёт
-  # (сама при автоматическом перезапуске или после «Re-run failed jobs»).
+  # macOS — отдельно: GitHub часто подолгу не выделяет машину macOS (с ноября 2026). Выпуск релиза
+  # её не ждёт; если .dmg собран позже (после «Re-run failed jobs»), его добавит задание attach-mac.
   package-mac:
     name: Установщик macOS Universal
+    # При выпуске релиза ничего не собирается заново
+    if: ${{ !inputs.version && !startsWith(github.ref, 'refs/tags/v') }}
     needs: test
     runs-on: macos-latest
     timeout-minutes: 60
@@ -315,6 +318,8 @@ jobs:
 
   package-linux:
     name: Пакеты Linux amd64 (deb, rpm, pacman, AppImage)
+    # При выпуске релиза ничего не собирается заново
+    if: ${{ !inputs.version && !startsWith(github.ref, 'refs/tags/v') }}
     needs: test
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -390,38 +395,67 @@ jobs:
           docker run --rm --shm-size=1g -v "$PWD/pkg:/pkg:ro" -v "$PWD/scripts:/ci:ro" \
             "${{ matrix.image }}" bash /ci/ci-linux-install.sh "${{ matrix.format }}"
 
+  # Выпуск релиза: по кнопке (номер версии) или тегу v*. Ничего не собирает — берёт готовые и уже
+  # проверенные установщики из зелёной проверки этого же коммита в main (scripts/ci-release-source.sh).
   release:
-    name: Публикация релиза (тег v* или кнопка «Выпустить релиз»)
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release && github.ref == 'refs/heads/main')
-    needs: [package, package-linux, linux-install, ssh-integration]
+    name: Публикация релиза
+    if: ${{ inputs.version || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     # Два запуска кнопки подряд не выпустят релиз дважды
     concurrency:
       group: release
       cancel-in-progress: false
     permissions:
       contents: write
-    outputs:
-      tag: ${{ steps.ver.outputs.tag }}
+      actions: read
     steps:
       - uses: actions/checkout@v5
-      - name: Версия и тег
+      - name: Проверки перед выпуском
         id: ver
+        env:
+          WANT: ${{ inputs.version }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="v$(tr -d ' \r\n' < VERSION)"; fi
-          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
-            echo "::error::Тег $TAG уже есть — эта версия уже выпущена"; exit 1
+          fail() { echo "::error::$1"; exit 1; }
+          VERSION="$(tr -d ' \r\n' < VERSION)"
+          PKG="$(node -p "require('./package.json').version")"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="$GITHUB_REF_NAME"
+            [ "$TAG" = "v$VERSION" ] || fail "Тег $TAG не совпадает с версией $VERSION в файле VERSION"
+          else
+            [ "$GITHUB_REF" = refs/heads/main ] || fail "Релиз выпускается только из ветки main"
+            WANT="$(tr -d ' ' <<<"${WANT#v}")"
+            [ "$WANT" = "$VERSION" ] || fail "Вписана версия $WANT, а в файле VERSION — $VERSION"
+            TAG="v$VERSION"
+            if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+              fail "Тег $TAG уже есть — эта версия уже выпущена. Поднимите версию в VERSION, package.json и CHANGELOG.md."
+            fi
           fi
+          [ "$VERSION" = "$PKG" ] || fail "Версия в VERSION ($VERSION) и в package.json ($PKG) не совпадает"
+          grep -q "^## \[$VERSION\]" CHANGELOG.md || fail "В CHANGELOG.md нет раздела [$VERSION]"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-          echo "Релиз $TAG, коммит $GITHUB_SHA"
-      - uses: actions/download-artifact@v6
-        with:
-          path: dist-release
-          # Только установщики и пакеты: служебные артефакты (отчёт импорта, снимки) в релиз не попадают
-          pattern: NetAdminDesk-*
-          merge-multiple: true
-      - run: ls -la dist-release
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Выпуск $TAG из коммита $GITHUB_SHA"
+      - name: Готовые установщики из зелёной проверки этого коммита
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          if ! RUN="$(bash scripts/ci-release-source.sh)"; then
+            echo "::error::Для коммита ${SHA:0:7} в main нет зелёной проверки (пройти должно всё, кроме macOS). Дождитесь, пока во вкладке Actions закончится проверка этого коммита, и запустите выпуск снова."
+            exit 1
+          fi
+          echo "Файлы берутся из проверки https://github.com/$REPO/actions/runs/$RUN"
+          gh run download "$RUN" -R "$REPO" -p 'NetAdminDesk-*' -D downloaded
+          mkdir -p dist-release
+          find downloaded -type f -exec mv -t dist-release {} +
+          ls -la dist-release
+          for f in NetAdminDesk-Windows-x64-Setup.exe netadmindesk-linux-amd64.deb netadmindesk-linux-amd64.rpm netadmindesk-linux-amd64.pacman netadmindesk-linux-amd64.AppImage; do
+            test -f "dist-release/$f" || { echo "::error::В проверке $RUN нет файла $f"; exit 1; }
+          done
+          # Контрольные суммы сверяются ещё раз перед публикацией
+          (cd dist-release && sha256sum -c ./*.sha256)
       - name: Текст релиза из CHANGELOG.md
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
@@ -442,7 +476,7 @@ jobs:
             echo '**Установщики:** Windows x64 (`.exe`), macOS Universal — Intel и Apple Silicon (`.dmg`).'
             echo
             if [ ! -f dist-release/NetAdminDesk-macOS-Universal.dmg ]; then
-              # Строку уберёт задание release-mac, когда добавит .dmg
+              # Строку уберёт задание attach-mac, когда добавит .dmg
               echo '**macOS:** установщик появится в этом релизе позже — его сборка ждёт свободную машину GitHub.'
               echo
             fi
@@ -453,7 +487,7 @@ jobs:
           cat release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
-          # Для кнопки тег создаётся здесь, на собранном коммите (тег от GITHUB_TOKEN не запускает сборку повторно)
+          # Для кнопки тег создаётся здесь, на этом коммите (тег от GITHUB_TOKEN не запускает сборку повторно)
           tag_name: ${{ steps.ver.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: NetAdmin Desk ${{ steps.ver.outputs.tag }}
@@ -463,10 +497,12 @@ jobs:
           fail_on_unmatched_files: true
           files: dist-release/*
 
-  release-mac:
-    name: Установщик macOS — в релиз
-    # Запускается, когда опубликован релиз и прошла сборка macOS — в том числе после «Re-run failed jobs»
-    needs: [release, package-mac]
+  # Сборка macOS прошла позже выпуска (например, после ночного «Re-run failed jobs» в проверке этого
+  # коммита) — .dmg добавляется в уже выпущенный релиз этой версии, если он сделан из этого же коммита.
+  attach-mac:
+    name: Установщик macOS — в уже выпущенный релиз
+    needs: package-mac
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     concurrency:
       group: release
@@ -486,9 +522,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="v$(tr -d ' \r\n' < VERSION)"; fi
-          ls -la mac
-          gh release upload "$TAG" mac/NetAdminDesk-macOS-Universal.dmg mac/NetAdminDesk-macOS-Universal.dmg.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+          TAG="v$(tr -d ' \r\n' < VERSION)"
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Релиза $TAG ещё нет — .dmg войдёт в него при выпуске."; exit 0
+          fi
+          TAGSHA="$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)"
+          [ -n "$TAGSHA" ] || TAGSHA="$(git ls-remote origin "refs/tags/$TAG" | cut -f1)"
+          if [ "$TAGSHA" != "$GITHUB_SHA" ]; then
+            echo "Релиз $TAG выпущен из другого коммита — не трогаю."; exit 0
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx NetAdminDesk-macOS-Universal.dmg; then
+            echo "В релизе $TAG уже есть .dmg."; exit 0
+          fi
+          gh release upload "$TAG" mac/NetAdminDesk-macOS-Universal.dmg mac/NetAdminDesk-macOS-Universal.dmg.sha256 --repo "$GITHUB_REPOSITORY"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
           if grep -q '^\*\*macOS:\*\* установщик появится' notes.md; then
             grep -v '^\*\*macOS:\*\* установщик появится' notes.md > notes-new.md
