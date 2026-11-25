@@ -21,7 +21,8 @@ api() {
   local i out
   for i in 1 2 3 4 5; do
     if out="$(gh api "$@" 2>/tmp/gh-api.err)"; then
-      printf '%s' "$out"
+      # С переводом строки в конце: без него read возвращает ошибку и при set -e сценарий молча падает
+      printf '%s\n' "$out"
       return 0
     fi
     echo "Сбой запроса к GitHub ($i из 5): $(tr '\n' ' ' </tmp/gh-api.err)" >&2
