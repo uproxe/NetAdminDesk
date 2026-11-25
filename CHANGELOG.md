@@ -16,7 +16,12 @@
   - Если NetLoom уже установлен той же или более новой версии, шаг сообщает об этом и ничего не ставит; если старой — предлагает обновить.
   - Если скачать или установить NetLoom не удалось, NetAdmin Desk всё равно установлен, а установщик называет причину.
   - Тихая установка вместе с NetLoom: `NetAdminDesk-Windows-x64-Setup.exe /S /NETLOOM=1`. Шаги и результат пишутся в журнал `%TEMP%\NetAdminDesk-NetLoom.log` — причину неудачи видно и без окон.
+- **Кнопка «Выпустить релиз» в GitHub Actions.** Релиз можно выпустить из браузера, без git на компьютере: Actions → build → Run workflow → отметить «Выпустить релиз». После всех проверок создаётся тег `v<версия из VERSION>` и публикуется релиз; если такая версия уже выпущена или версии в файлах не совпадают, запуск сразу останавливается с понятной ошибкой.
 - **Проверка версии Windows в установщике.** На Windows 7, 8, 8.1 и Windows Server 2012 / 2012 R2 установщик сразу объясняет, что программа там не запустится, вместо установки программы, которая не откроется.
+
+### Изменено
+
+- **Удаление программы в Windows удаляет и все её данные** — папку `%APPDATA%\NetAdmin Desk`: устройства и пароли, менеджер паролей, мониторинг, резервные копии конфигураций, историю и настройки. Первая страница деинсталлятора об этом предупреждает и подсказывает, как сохранить данные заранее. При обновлении программы данные не трогаются. Данные переносимого режима (папка `netadmin-data` рядом с программой) и браузер NetLoom не затрагиваются. Это действует для установок 1.4.0 и новее: удаление 1.3.0 и более ранних версий выполняется их собственным деинсталлятором и данные оставляет.
 
 ### Исправлено
 
@@ -217,7 +222,7 @@
 
 [Unreleased]: https://github.com/uproxe/NetAdminDesk/compare/v1.4.0...HEAD
 [1.4.0]: https://github.com/uproxe/NetAdminDesk/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/uproxe/NetAdminDesk/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/uproxe/NetAdminDesk/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/uproxe/NetAdminDesk/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/uproxe/NetAdminDesk/releases/tag/v1.0.0
+[1.3.0]: https://github.com/uproxe/NetAdminDesk/compare/51625d9456e9e1d6d108e2e3bd5fa2ae1338b31f...v1.3.0
+[1.2.0]: https://github.com/uproxe/NetAdminDesk/compare/86b8deee7b6fadfb003821bebaf6d1facf562f5f...51625d9456e9e1d6d108e2e3bd5fa2ae1338b31f
+[1.1.0]: https://github.com/uproxe/NetAdminDesk/compare/55458284cd2ed70b187a559f116b2d5a6afdd16a...86b8deee7b6fadfb003821bebaf6d1facf562f5f
+[1.0.0]: https://github.com/uproxe/NetAdminDesk/tree/55458284cd2ed70b187a559f116b2d5a6afdd16a

@@ -63,8 +63,11 @@ npm run typecheck
 
 1. Перенести пункты из `[Unreleased]` в новый раздел `## [X.Y.Z] — ГГГГ-ММ-ДД` в CHANGELOG.md, обновить ссылки внизу файла.
 2. Обновить версию в `package.json` и `VERSION`.
-3. Коммит `chore(release): X.Y.Z`, аннотированный тег `vX.Y.Z`, `git push --follow-tags`.
-4. GitHub Actions соберёт установщики и опубликует релиз с текстом из CHANGELOG.
+3. Коммит `chore(release): X.Y.Z` в `main`.
+4. Выпуск — одним из способов:
+   - кнопкой: **Actions → build → Run workflow**, отметить «Выпустить релиз» (git на компьютере не нужен; тег создаст сама сборка);
+   - тегом: аннотированный тег `vX.Y.Z` и `git push --follow-tags`.
+5. GitHub Actions соберёт установщики, проверит их и опубликует релиз с текстом из CHANGELOG.
 
 Версии — по [семантическому версионированию](https://semver.org/lang/ru/).
 
