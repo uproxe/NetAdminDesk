@@ -26,11 +26,12 @@
 ; Журнал установки NetLoom (в папке временных файлов пользователя) — причина видна и при /S
 !define NETLOOM_LOG "$TEMP\NetAdminDesk-NetLoom.log"
 
-; Дописать строку в журнал (ANSI системы; $4 — рабочий регистр)
+; Дописать строку в журнал. Журнал в UTF-16 с BOM — русский текст читается на Windows с любым языком
+; системы (в ANSI на английской Windows он превратился бы в «???»). $4 — рабочий регистр.
 !macro NetLoomLog text
   FileOpen $4 "${NETLOOM_LOG}" a
   FileSeek $4 0 END
-  FileWrite $4 "${text}$\r$\n"
+  FileWriteUTF16LE $4 "${text}$\r$\n"
   FileClose $4
 !macroend
 
@@ -87,6 +88,9 @@ Var NetLoomBoldFont
     StrCpy $2 "$PLUGINSDIR\NetLoom-${NETLOOM_VERSION}-setup.exe"
     StrCpy $1 ""
     Delete "${NETLOOM_LOG}"
+    FileOpen $4 "${NETLOOM_LOG}" w
+    FileWriteWord $4 0xFEFF
+    FileClose $4
     !insertmacro NetLoomLog "NetAdmin Desk: установка браузера NetLoom ${NETLOOM_VERSION}"
     !insertmacro NetLoomLog "Загрузка: ${NETLOOM_URL}"
 

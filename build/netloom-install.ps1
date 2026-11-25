@@ -17,8 +17,8 @@ $ProgressPreference = 'SilentlyContinue'
 
 function Say([string]$Text) {
   Write-Output $Text
-  # Кодировка журнала — ANSI системы, как у строк, которые дописывает установщик NSIS
-  if ($Log) { try { Add-Content -LiteralPath $Log -Value $Text -Encoding Default } catch { } }
+  # Журнал в UTF-16, как и строки, которые дописывает установщик NSIS (BOM он уже записал)
+  if ($Log) { try { Add-Content -LiteralPath $Log -Value $Text -Encoding Unicode } catch { } }
 }
 
 function Remove-Download {

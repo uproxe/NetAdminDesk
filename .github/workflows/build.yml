@@ -162,7 +162,7 @@ jobs:
           $setup = Start-Process -FilePath "release\${{ matrix.artifact }}" -ArgumentList '/S', '/NETLOOM=1' -Wait -PassThru
           $log = Join-Path $env:TEMP 'NetAdminDesk-NetLoom.log'
           Write-Host "--- журнал $log ---"
-          if (Test-Path $log) { Get-Content $log -Encoding ([Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.ANSICodePage)) } else { Write-Host '(журнала нет — до установки NetLoom дело не дошло)' }
+          if (Test-Path $log) { Get-Content $log -Encoding Unicode } else { Write-Host '(журнала нет — до установки NetLoom дело не дошло)' }
           Write-Host '---'
           if ($setup.ExitCode -ne 0) { throw "Установщик завершился с кодом $($setup.ExitCode)" }
           $got = (Get-ItemProperty $key -ErrorAction SilentlyContinue).DisplayVersion
@@ -183,11 +183,18 @@ jobs:
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $shell = New-Object -ComObject WScript.Shell
           $p = Start-Process -FilePath "release\${{ matrix.artifact }}" -PassThru
+          Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class Win { public struct RECT { public int L, T, R, B; } [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r); }'
           function Shot($name) {
             $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $p.Refresh()
+            $r = New-Object Win+RECT
+            if ($p.MainWindowHandle -ne 0 -and [Win]::GetWindowRect($p.MainWindowHandle, [ref]$r)) { $b = New-Object System.Drawing.Rectangle $r.L, $r.T, ($r.R - $r.L), ($r.B - $r.T) }
             $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
             [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-            $bmp.Save("$env:RUNNER_TEMP\installer-$name.png")
+            $file = "$env:RUNNER_TEMP\installer-$name.png"
+            $bmp.Save($file)
+            # Временно для проверки страницы: снимок окна текстом в журнале (артефакты отсюда не скачать)
+            if ($name -eq '3-extra') { Write-Host 'SHOT-BEGIN'; Write-Host ([Convert]::ToBase64String([IO.File]::ReadAllBytes($file))); Write-Host 'SHOT-END' }
           }
           Start-Sleep 5; [void]$shell.AppActivate($p.Id); Shot '1-start'
           # «Только для меня» → «Далее», папка → «Далее», дальше — шаг «Дополнительно»
