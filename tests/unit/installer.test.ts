@@ -44,6 +44,15 @@ test('установщик Windows: NetLoom по умолчанию не ста�
   assert.match(nsh, /AtLeastWin10/, 'на старых Windows установщик сразу объясняет, почему нельзя');
 });
 
+test('удаление программы в Windows удаляет данные и предупреждает об этом', () => {
+  const yml = read('electron-builder.yml').toString('utf8');
+  assert.match(yml, /^\s+deleteAppDataOnUninstall: true$/m);
+  const nsh = read('build/installer.nsh').toString('utf8');
+  const un = nsh.slice(nsh.lastIndexOf('!else'));
+  assert.match(un, /!macro customUnWelcomePage/, 'страница деинсталлятора с предупреждением');
+  assert.match(un, /будут удалены все её данные/);
+});
+
 test('пакеты Linux: deb, rpm, pacman и AppImage', () => {
   const yml = read('electron-builder.yml').toString('utf8');
   const linux = yml.slice(yml.indexOf('\nlinux:'), yml.indexOf('\ndeb:'));

@@ -35,8 +35,10 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: NetAdmin Desk
-  # Данные пользователя (база, бэкапы) при удалении программы сохраняются.
-  deleteAppDataOnUninstall: false
+  # Удаление программы удаляет и все её данные (%APPDATA%\NetAdmin Desk: база, пароли, мониторинг, бэкапы).
+  # При обновлении electron-builder запускает старый деинсталлятор с флагом --updated — данные остаются.
+  # Предупреждение — на первой странице деинсталлятора (build/installer.nsh).
+  deleteAppDataOnUninstall: true
   artifactName: NetAdminDesk-Windows-x64-Setup.${ext}
 
 mac:
