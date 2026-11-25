@@ -1,0 +1,40 @@
+# Автоматический перезапуск задач сборки, которым GitHub не выделил машину.
+#
+# С ноября 2026 у GitHub не хватает машин macOS: задача 15 минут ждёт в очереди и отменяется,
+# не выполнив ни одного шага. Запуск становится красным, а релиз не публикуется, хотя ошибки
+# в проекте нет. Этот процесс после каждой упавшей сборки перезапускает только такие задачи
+# (вместе с зависящей от них публикацией релиза), не больше трёх раз. Настоящие ошибки сборки
+# и тестов не перезапускаются. Логика — в scripts/ci-retry-no-runner.sh.
+name: Перезапуск при нехватке машин GitHub
+
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+# Один перезапускающий процесс на запуск сборки
+concurrency:
+  group: retry-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    name: Перезапуск задач без машины
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/ci-retry-no-runner.sh
+          sparse-checkout-cone-mode: false
+      - name: Перезапуск
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.event.workflow_run.id }}
+        run: bash scripts/ci-retry-no-runner.sh
