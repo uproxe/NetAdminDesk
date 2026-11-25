@@ -149,6 +149,8 @@ jobs:
           & $ps -NoProfile -NonInteractive -ExecutionPolicy Bypass -File build\netloom-install.ps1 -Url 'http://github.com/' -Sha256 $defs.NETLOOM_SHA256 -Out $out
           if ($LASTEXITCODE -ne 4) { throw "Ожидался код 4 (адрес не https), получен $LASTEXITCODE" }
           Write-Host 'Отказы работают.'
+          # Последний вызов намеренно вернул код 4 — без явного выхода GitHub счёл бы шаг упавшим
+          exit 0
       - name: NetLoom — тихая установка вместе с NetAdmin Desk (/S /NETLOOM=1)
         timeout-minutes: 15
         if: runner.os == 'Windows'
