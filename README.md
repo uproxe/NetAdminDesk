@@ -34,9 +34,18 @@
 
 Готовые установщики — на странице [релизов](https://github.com/uproxe/NetAdminDesk/releases). Собираются в GitHub Actions (`.github/workflows/build.yml`) на Windows, macOS и Linux; при публикации тега `v*` релиз создаётся автоматически, рядом с каждым файлом — контрольная сумма `.sha256`:
 
-- `NetAdminDesk-Windows-x64-Setup.exe`
-- `NetAdminDesk-macOS-Universal.dmg` (Intel и Apple Silicon)
-- `netadmindesk-linux-amd64.deb` (Debian / Ubuntu)
+| Система | Файл |
+|---|---|
+| Windows 10, 11, Server 2016 и новее (x64) | `NetAdminDesk-Windows-x64-Setup.exe` |
+| macOS (Intel и Apple Silicon) | `NetAdminDesk-macOS-Universal.dmg` |
+| Debian, Ubuntu, Mint, Astra Linux | `netadmindesk-linux-amd64.deb` |
+| Fedora, RHEL, Rocky, Alma, openSUSE, РЕД ОС, РОСА | `netadmindesk-linux-amd64.rpm` |
+| Arch, Manjaro | `netadmindesk-linux-amd64.pacman` |
+| Любой другой Linux (в том числе ALT), без установки | `netadmindesk-linux-amd64.AppImage` |
+
+Каждый пакет Linux перед публикацией ставится в CI в чистом контейнере своего дистрибутива (Debian 13, Ubuntu 24.04, Fedora, Rocky Linux 9, openSUSE Tumbleweed, Arch) и проходит самопроверку. AppImage запускается без установки: `chmod +x netadmindesk-linux-amd64.AppImage` и двойной щелчок; на новых Ubuntu для него нужен пакет `libfuse2t64` (`libfuse2` в более старых). Windows 7, 8, 8.1 и Windows Server 2012 / 2012 R2 не поддерживаются: на них не работает Electron, на котором сделана программа.
+
+**Браузер NetLoom (только Windows, по желанию).** В установщике Windows есть шаг «Дополнительно» с галочкой «Также установить браузер NetLoom» — по умолчанию она снята. NetAdmin Desk ставится без интернета; NetLoom, если отметить галочку, скачивается с GitHub во время установки, проверяется по контрольной сумме SHA-256 и ставится для текущего пользователя. Для массовой установки: `NetAdminDesk-Windows-x64-Setup.exe /S /NETLOOM=1`.
 
 Сборки **не подписаны** сертификатами разработчика: при первом запуске Windows SmartScreen и macOS Gatekeeper покажут предупреждение. Как их запустить — в [docs/BUILD.md](docs/BUILD.md#неподписанные-сборки).
 

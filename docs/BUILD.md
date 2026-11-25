@@ -3,7 +3,8 @@
 ## Требования
 
 - Node.js 22.5 или новее (для тестов используется встроенный `node:sqlite`; приложение использует sql.js и от этого не зависит).
-- Для установщиков — родная ОС: Windows для `.exe`, macOS для `.dmg`, Linux для `.deb`. Кросс-сборка не используется.
+- Для установщиков — родная ОС: Windows для `.exe`, macOS для `.dmg`, Linux для `.deb`, `.rpm`, `.pacman` и AppImage. Кросс-сборка не используется.
+- Для `.rpm` и `.pacman` на Linux нужны `rpmbuild` и `bsdtar`: в Debian/Ubuntu — `sudo apt install rpm libarchive-tools`.
 
 ## Зависимости
 
@@ -55,10 +56,21 @@ NAD_SSH_HOST=127.0.0.1 NAD_SSH_PORT=2222 NAD_SSH_USER=nad NAD_SSH_PASS=... npm r
 ```bash
 npm run dist:win     # на Windows → release/NetAdminDesk-Windows-x64-Setup.exe
 npm run dist:mac     # на macOS   → release/NetAdminDesk-macOS-Universal.dmg
-npm run dist:linux   # на Linux   → release/netadmindesk-linux-amd64.deb
+npm run dist:linux   # на Linux   → release/netadmindesk-linux-amd64.{deb,rpm,pacman,AppImage}
 ```
 
-Настройки — в `electron-builder.yml`. Имена файлов заданы через `artifactName`.
+Настройки — в `electron-builder.yml`. Имена файлов заданы через `artifactName`. Зависимости пакетов от системных библиотек перечислены отдельно для `.deb`, `.rpm` (оба варианта названий — Fedora/RHEL и openSUSE) и `.pacman`.
+
+### Браузер NetLoom в установщике Windows
+
+Шаг «Дополнительно» и проверка версии Windows — в `build/installer.nsh` (electron-builder подключает его сам). NetLoom в установщик не вшит: он скачивается во время установки, только если отмечена галочка, сценарием `build/netloom-install.ps1`, который сохраняет файл, лишь когда SHA-256 совпала. Адрес, сумма и размер закреплены в `build/netloom.nsh`. Новую версию NetLoom подключают так:
+
+```bash
+node scripts/update-netloom.mjs 1.0.4   # скачает установщик NetLoom из релиза и пересчитает сумму и размер
+git diff build/netloom.nsh               # проверить и закоммитить
+```
+
+`build/installer.nsh`, `build/netloom.nsh` и `build/netloom-install.ps1` хранятся в UTF-8 **с BOM**: NSIS и Windows PowerShell 5.1 без BOM читают файл в кодировке системы, и русский текст исказится (это проверяет тест `tests/unit/installer.test.ts`).
 
 ### Иконки
 
@@ -70,7 +82,7 @@ python3 scripts/make-icons.py   # нужны rsvg-convert (librsvg) и Pillow
 
 | Файл | Где используется |
 |---|---|
-| `build/icon.png` (1024 px) | Linux (.deb), значок окна |
+| `build/icon.png` (1024 px) | Linux (.deb, .rpm, .pacman, AppImage), значок окна |
 | `build/icon-mac.png` (1024 px, с полями) | macOS — поля по сетке значков, иначе значок в Dock крупнее соседних |
 | `build/icon.ico` (16–256 px) | Windows; в размерах до 32 px линии знака толще |
 | `build/tray.png`, `tray@2x.png` | область уведомлений Windows и Linux |
@@ -86,8 +98,10 @@ python3 scripts/make-icons.py   # нужны rsvg-convert (librsvg) и Pillow
 |---|---|
 | `test` | модульные тесты (node:sqlite и sql.js), проверка типов (не блокирует), раннер ubuntu-24.04, сборка, отчёт импорта TXT |
 | `ssh-integration` | поднимает OpenSSH в docker и проверяет: подключение и запрос отпечатка, блокировку при смене ключа, exec, интерактивную оболочку, маскировку паролей в истории, SFTP, локальный туннель |
-| `package` (Windows, macOS, Linux) | сборка установщика, проверка имени файла, **запуск собранного приложения** с `--smoke-test`: Windows — тихая установка NSIS и запуск установленной программы; macOS — монтирование `.dmg`, проверка, что бинарник универсальный (`lipo`: x86_64 и arm64), проверка ad-hoc подписи, запуск; Linux — установка `.deb` через apt (проверяются зависимости пакета) и запуск под Xvfb. Публикует установщик и `.sha256` как артефакт |
-| `release` | для тегов `v*`: публикует релиз GitHub с тремя установщиками и их `.sha256`; текст релиза — раздел этой версии из `CHANGELOG.md` (если раздела нет, публикация останавливается с ошибкой). Теги с дефисом (`v1.2.0-rc.1`) публикуются как предварительные версии |
+| `package` (Windows, macOS) | сборка установщика, проверка имени файла, **запуск собранного приложения** с `--smoke-test`: Windows — тихая установка NSIS и запуск установленной программы, затем проверки NetLoom (сценарий загрузки отклоняет неверную сумму, несуществующий адрес и не-https; тихая установка `/S /NETLOOM=1` действительно ставит NetLoom) и снимки шага «Дополнительно» (не блокируют); macOS — монтирование `.dmg`, проверка, что бинарник универсальный (`lipo`: x86_64 и arm64), проверка ad-hoc подписи, запуск. Публикует установщик и `.sha256` как артефакт |
+| `package-linux` | сборка `.deb`, `.rpm`, `.pacman` и AppImage, самопроверка установленного `.deb` и AppImage на раннере, контрольные суммы |
+| `linux-install` | каждый пакет ставится штатным менеджером пакетов в чистом контейнере (Debian 13, Ubuntu 24.04, Fedora, Rocky Linux 9, openSUSE Tumbleweed, Arch Linux): проверяются зависимости пакета, наличие всех системных библиотек (`ldd`) и самопроверка программы (`scripts/ci-linux-install.sh`) |
+| `release` | для тегов `v*`, только если прошли все проверки выше: публикует релиз GitHub с установщиками, пакетами Linux и их `.sha256` (служебные артефакты в релиз не попадают); текст релиза — раздел этой версии из `CHANGELOG.md` (если раздела нет, публикация останавливается с ошибкой). Теги с дефисом (`v1.2.0-rc.1`) публикуются как предварительные версии |
 
 Выпуск версии (подробнее — в [CONTRIBUTING.md](../CONTRIBUTING.md#выпуск-версии)):
 
@@ -112,7 +126,7 @@ git push --follow-tags
 - macOS 15 и новее: попытайтесь открыть приложение, затем «Системные настройки → Конфиденциальность и безопасность» → «Всё равно открыть»;
 - если macOS сообщает, что приложение «повреждено», или кнопки «Всё равно открыть» нет — снимите карантинный атрибут в Терминале после копирования в «Программы»: `xattr -dr com.apple.quarantine "/Applications/NetAdmin Desk.app"`.
 
-**Linux.** Подпись пакетов `.deb` не используется; установка: `sudo apt install ./netadmindesk-linux-amd64.deb` (apt подтянет зависимости, включая `libsecret-1-0` для хранения паролей в связке ключей).
+**Linux.** Пакеты не подписаны ключом репозитория. Установка: `sudo apt install ./netadmindesk-linux-amd64.deb`, `sudo dnf install ./netadmindesk-linux-amd64.rpm`, `sudo zypper install --allow-unsigned-rpm ./netadmindesk-linux-amd64.rpm`, `sudo pacman -U netadmindesk-linux-amd64.pacman` — менеджер пакетов подтянет зависимости, включая libsecret для хранения паролей в связке ключей.
 
 ### Как подписать, если появятся сертификаты
 

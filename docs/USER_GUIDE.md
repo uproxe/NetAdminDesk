@@ -3,6 +3,9 @@
 ## 1. Первый запуск
 
 1. Установите программу (см. [BUILD.md → Неподписанные сборки](BUILD.md#неподписанные-сборки), если система предупреждает о неизвестном издателе).
+   - **Windows** (10, 11, Server 2016 и новее): `NetAdminDesk-Windows-x64-Setup.exe`. На шаге «Дополнительно» можно отметить «Также установить браузер NetLoom» — по умолчанию галочка снята. Для NetLoom нужен интернет: он скачивается с GitHub во время установки и проверяется по контрольной сумме. Сам NetAdmin Desk ставится без интернета; если NetLoom скачать не удалось, установщик скажет почему, а NetAdmin Desk всё равно будет установлен.
+   - **Linux:** `.deb` — Debian, Ubuntu, Mint, Astra (`sudo apt install ./netadmindesk-linux-amd64.deb`); `.rpm` — Fedora, RHEL, Rocky, Alma, РЕД ОС, РОСА (`sudo dnf install ./netadmindesk-linux-amd64.rpm`), openSUSE (`sudo zypper install --allow-unsigned-rpm ./netadmindesk-linux-amd64.rpm`); `.pacman` — Arch, Manjaro (`sudo pacman -U netadmindesk-linux-amd64.pacman`); `.AppImage` — любой дистрибутив без установки (`chmod +x`, затем запуск; на новых Ubuntu нужен `libfuse2t64`).
+   - **macOS:** `NetAdminDesk-macOS-Universal.dmg`, перетащите программу в «Программы».
 2. При первом запуске создаётся база данных и автоматически загружаются:
    - встроенный справочник (276 команд коммутаторов, 406 команд Linux, 210 команд SQL), 152 сценария, 56 руководств, профили диагностики;
    - обезличенные TXT-заметки по коммутаторам и по ACL/object-group (177 записей) — без исправления синтаксиса. Итоги разбора — на «Главной» и в «Настройки → База данных → Отчёты импорта TXT». Свои TXT-файлы можно добавить в «Настройки → Импорт и экспорт → Импорт TXT».
