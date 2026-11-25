@@ -1,5 +1,6 @@
 # Сборка, тесты и установщики NetAdmin Desk для Windows, macOS и Linux.
 # Установщики собираются только здесь, на «родных» раннерах каждой ОС.
+# Пакеты Linux (.deb, .rpm, .pacman, AppImage) дополнительно ставятся в чистых контейнерах дистрибутивов.
 # Подписи сертификатами разработчика нет — см. docs/BUILD.md.
 name: build
 
@@ -94,10 +95,6 @@ jobs:
             os: macos-latest
             builder: --mac dmg --universal
             artifact: NetAdminDesk-macOS-Universal.dmg
-          - name: Linux amd64 (deb)
-            os: ubuntu-24.04
-            builder: --linux deb --x64
-            artifact: netadmindesk-linux-amd64.deb
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -119,18 +116,6 @@ jobs:
           test -f "release/${{ matrix.artifact }}"
 
       # ---- Самопроверка собранного приложения (--smoke-test) ----
-      - name: Самопроверка (Linux, установленный .deb)
-        timeout-minutes: 8
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb "./release/${{ matrix.artifact }}"
-          BIN="$(dpkg -L $(dpkg-deb -f release/${{ matrix.artifact }} Package) | grep -E '/netadmindesk$' | head -1)"
-          echo "Исполняемый файл: $BIN"
-          export NETADMIN_DESK_DATA="$RUNNER_TEMP/nad-data" NAD_SMOKE_OUT="$RUNNER_TEMP/smoke.json"
-          # --no-sandbox только для CI: на раннерах Ubuntu 24.04 AppArmor ограничивает пространства имён.
-          timeout 180 xvfb-run -a "$BIN" --smoke-test --no-sandbox
-          cat "$NAD_SMOKE_OUT"
       - name: Самопроверка (Windows, установка NSIS в тихом режиме)
         timeout-minutes: 8
         if: runner.os == 'Windows'
@@ -145,6 +130,71 @@ jobs:
           $p = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -Wait -PassThru
           Get-Content $env:NAD_SMOKE_OUT
           if ($p.ExitCode -ne 0) { throw "Самопроверка не пройдена: код $($p.ExitCode)" }
+      - name: NetLoom — загрузка отклоняется при неверной контрольной сумме или адресе
+        timeout-minutes: 10
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Тот же сценарий, что встроен в установщик, запускается той же Windows PowerShell 5.1
+          $defs = @{}
+          Get-Content build\netloom.nsh | ForEach-Object { if ($_ -match '^!define (\w+) "([^"]*)"') { $defs[$Matches[1]] = $Matches[2] } }
+          $out = "$env:RUNNER_TEMP\netloom-test.exe"
+          $ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+          & $ps -NoProfile -NonInteractive -ExecutionPolicy Bypass -File build\netloom-install.ps1 -Url $defs.NETLOOM_URL -Sha256 ('0' * 64) -Out $out -ExpectedBytes $defs.NETLOOM_BYTES
+          if ($LASTEXITCODE -ne 3) { throw "Ожидался код 3 (сумма не совпала), получен $LASTEXITCODE" }
+          if (Test-Path $out) { throw 'Файл с неверной суммой не удалён' }
+          & $ps -NoProfile -NonInteractive -ExecutionPolicy Bypass -File build\netloom-install.ps1 -Url 'https://github.com/uproxe/NetLoom/releases/download/v0.0.0/none.exe' -Sha256 $defs.NETLOOM_SHA256 -Out $out
+          if ($LASTEXITCODE -ne 2) { throw "Ожидался код 2 (не удалось скачать), получен $LASTEXITCODE" }
+          if (Test-Path $out) { throw 'Недокачанный файл не удалён' }
+          & $ps -NoProfile -NonInteractive -ExecutionPolicy Bypass -File build\netloom-install.ps1 -Url 'http://github.com/' -Sha256 $defs.NETLOOM_SHA256 -Out $out
+          if ($LASTEXITCODE -ne 4) { throw "Ожидался код 4 (адрес не https), получен $LASTEXITCODE" }
+          Write-Host 'Отказы работают.'
+      - name: NetLoom — тихая установка вместе с NetAdmin Desk (/S /NETLOOM=1)
+        timeout-minutes: 15
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path build\netloom.nsh -Pattern '^!define NETLOOM_VERSION "([^"]*)"').Matches[0].Groups[1].Value
+          $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\NetLoom'
+          if (Test-Path $key) { throw 'NetLoom уже стоит на раннере — проверка была бы неточной' }
+          $setup = Start-Process -FilePath "release\${{ matrix.artifact }}" -ArgumentList '/S', '/NETLOOM=1' -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Установщик завершился с кодом $($setup.ExitCode)" }
+          $got = (Get-ItemProperty $key -ErrorAction SilentlyContinue).DisplayVersion
+          if ($got -ne $ver) { throw "NetLoom $ver не установлен (в списке программ: '$got')" }
+          $dir = (Get-ItemProperty $key).InstallLocation
+          if (-not (Test-Path (Join-Path $dir 'netloom.exe'))) { throw "Нет $dir\netloom.exe" }
+          Write-Host "NetLoom $got установлен в $dir"
+          if (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'Programs\NetAdmin Desk\NetAdmin Desk.exe'))) { throw 'NetAdmin Desk пропал после повторной установки' }
+      - name: Снимок шага «Дополнительно» (для просмотра)
+        timeout-minutes: 5
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          # NetLoom уже установлен предыдущим шагом — удаляем, чтобы увидеть шаг с галочкой
+          $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\NetLoom'
+          if (Test-Path $key) { Start-Process -FilePath (Join-Path (Get-ItemProperty $key).InstallLocation 'uninstall.exe') -ArgumentList '/S' -Wait }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $shell = New-Object -ComObject WScript.Shell
+          $p = Start-Process -FilePath "release\${{ matrix.artifact }}" -PassThru
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("$env:RUNNER_TEMP\installer-$name.png")
+          }
+          Start-Sleep 5; [void]$shell.AppActivate($p.Id); Shot '1-start'
+          # «Только для меня» → «Далее», папка → «Далее», дальше — шаг «Дополнительно»
+          [System.Windows.Forms.SendKeys]::SendWait('{ENTER}'); Start-Sleep 3; Shot '2'
+          [System.Windows.Forms.SendKeys]::SendWait('{ENTER}'); Start-Sleep 3; Shot '3-extra'
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v6
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        with:
+          name: installer-screenshots
+          path: ${{ runner.temp }}/installer-*.png
+          if-no-files-found: ignore
       - name: Самопроверка (macOS, приложение из .dmg)
         timeout-minutes: 8
         if: runner.os == 'macOS'
@@ -176,10 +226,87 @@ jobs:
             release/${{ matrix.artifact }}.sha256
           if-no-files-found: error
 
+  package-linux:
+    name: Пакеты Linux amd64 (deb, rpm, pacman, AppImage)
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      FILES: netadmindesk-linux-amd64.deb netadmindesk-linux-amd64.rpm netadmindesk-linux-amd64.pacman netadmindesk-linux-amd64.AppImage
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: ${{ env.NPM_INSTALL }}
+      - run: npm run build
+      - name: Инструменты для .rpm и .pacman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm libarchive-tools xvfb
+      - name: Сборка пакетов
+        run: npx electron-builder --linux --x64 --publish never
+      - name: Проверка имён файлов
+        run: |
+          ls -la release
+          for f in $FILES; do test -f "release/$f" || { echo "::error::нет release/$f"; exit 1; }; done
+      - name: Самопроверка .deb (установка на этом раннере)
+        timeout-minutes: 8
+        run: |
+          sudo apt-get install -y ./release/netadmindesk-linux-amd64.deb
+          export NETADMIN_DESK_DATA="$RUNNER_TEMP/nad-data" NAD_SMOKE_OUT="$RUNNER_TEMP/smoke.json"
+          # --no-sandbox только для CI: на раннерах Ubuntu 24.04 AppArmor ограничивает пространства имён.
+          timeout 180 xvfb-run -a netadmindesk --smoke-test --no-sandbox
+          cat "$NAD_SMOKE_OUT"
+      - name: Самопроверка AppImage
+        timeout-minutes: 8
+        run: |
+          chmod +x release/netadmindesk-linux-amd64.AppImage
+          # Распаковка во временную папку вместо монтирования: FUSE в CI не нужен
+          export APPIMAGE_EXTRACT_AND_RUN=1 NETADMIN_DESK_DATA="$RUNNER_TEMP/nad-data-appimage" NAD_SMOKE_OUT="$RUNNER_TEMP/smoke-appimage.json"
+          timeout 180 xvfb-run -a ./release/netadmindesk-linux-amd64.AppImage --smoke-test --no-sandbox
+          cat "$NAD_SMOKE_OUT"
+      - name: Контрольные суммы
+        run: |
+          mkdir -p upload
+          cd release
+          for f in $FILES; do sha256sum "$f" > "$f.sha256"; cp "$f" "$f.sha256" ../upload/; cat "$f.sha256"; done
+      - uses: actions/upload-artifact@v6
+        with:
+          name: NetAdminDesk-Linux-packages
+          path: upload/*
+          if-no-files-found: error
+
+  linux-install:
+    name: Установка в ${{ matrix.name }}
+    needs: package-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Debian 13, image: 'debian:13', format: deb }
+          - { name: Ubuntu 24.04, image: 'ubuntu:24.04', format: deb }
+          - { name: Fedora, image: 'fedora:latest', format: rpm }
+          - { name: Rocky Linux 9, image: 'rockylinux/rockylinux:9', format: rpm }
+          - { name: openSUSE Tumbleweed, image: 'opensuse/tumbleweed', format: rpm }
+          - { name: Arch Linux, image: 'archlinux:latest', format: pacman }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v6
+        with:
+          name: NetAdminDesk-Linux-packages
+          path: pkg
+      - name: Установка пакета и самопроверка
+        run: |
+          docker run --rm --shm-size=1g -v "$PWD/pkg:/pkg:ro" -v "$PWD/scripts:/ci:ro" \
+            "${{ matrix.image }}" bash /ci/ci-linux-install.sh "${{ matrix.format }}"
+
   release:
     name: Публикация релиза (только для тегов v*)
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [package, ssh-integration]
+    needs: [package, package-linux, linux-install, ssh-integration]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -188,6 +315,8 @@ jobs:
       - uses: actions/download-artifact@v6
         with:
           path: dist-release
+          # Только установщики и пакеты: служебные артефакты (отчёт импорта, снимки) в релиз не попадают
+          pattern: NetAdminDesk-*
           merge-multiple: true
       - run: ls -la dist-release
       - name: Текст релиза из CHANGELOG.md
@@ -207,7 +336,9 @@ jobs:
             echo
             echo '---'
             echo
-            echo '**Установщики:** Windows x64 (`.exe`), macOS Universal — Intel и Apple Silicon (`.dmg`), Debian/Ubuntu amd64 (`.deb`). Рядом с каждым — файл `.sha256` с контрольной суммой.'
+            echo '**Установщики:** Windows x64 (`.exe`), macOS Universal — Intel и Apple Silicon (`.dmg`).'
+            echo
+            echo '**Linux amd64:** `.deb` — Debian, Ubuntu, Mint, Astra Linux; `.rpm` — Fedora, RHEL, Rocky, Alma, openSUSE, РЕД ОС, РОСА; `.pacman` — Arch, Manjaro; `.AppImage` — любой дистрибутив без установки. Рядом с каждым файлом — `.sha256` с контрольной суммой.'
             echo
             echo 'Сборки не подписаны сертификатами разработчика: Windows SmartScreen и macOS Gatekeeper покажут предупреждение при первом запуске — как запустить, см. [docs/BUILD.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/BUILD.md#неподписанные-сборки).'
           } >> release-notes.md
