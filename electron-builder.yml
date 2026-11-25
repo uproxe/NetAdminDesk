@@ -61,8 +61,17 @@ dmg:
 afterSign: build/afterSign.js
 
 linux:
+  # .deb — Debian, Ubuntu, Mint, Astra Linux; .rpm — Fedora, RHEL и производные, openSUSE, РЕД ОС, РОСА;
+  # .pacman — Arch, Manjaro; AppImage — любой дистрибутив без установки (в том числе ALT Linux).
+  # Каждый пакет в CI ставится в чистом контейнере своего дистрибутива (scripts/ci-linux-install.sh).
   target:
     - target: deb
+      arch: [x64]
+    - target: rpm
+      arch: [x64]
+    - target: pacman
+      arch: [x64]
+    - target: AppImage
       arch: [x64]
   icon: build/icon.png
   category: Network
@@ -86,4 +95,32 @@ deb:
     - libuuid1
     - libsecret-1-0
     - libasound2 | libasound2t64
+    - libgbm1
   artifactName: netadmindesk-linux-amd64.${ext}
+rpm:
+  # Названия пакетов в Fedora/RHEL и openSUSE различаются — указаны оба варианта (rpm 4.13+).
+  depends:
+    - (gtk3 or libgtk-3-0)
+    - (libnotify or libnotify4)
+    - (nss or mozilla-nss)
+    - (libXScrnSaver or libXss1)
+    - (libXtst or libXtst6)
+    - xdg-utils
+    - at-spi2-core
+    - (libuuid or libuuid1)
+    - (libsecret or libsecret-1-0)
+    - (alsa-lib or libasound2)
+    - (mesa-libgbm or libgbm1)
+pacman:
+  depends:
+    - gtk3
+    - libnotify
+    - nss
+    - libxss
+    - libxtst
+    - xdg-utils
+    - at-spi2-core
+    - util-linux-libs
+    - libsecret
+    - alsa-lib
+    - mesa

@@ -30,7 +30,7 @@
     "import-report": "tsx scripts/import-report.ts",
     "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "dist:mac": "npm run build && electron-builder --mac dmg --universal --publish never",
-    "dist:linux": "npm run build && electron-builder --linux deb --x64 --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --x64 --publish never",
     "preview": "node scripts/build.mjs --preview",
     "typecheck:offline": "tsc --noEmit -p tsconfig.offline.json && tsc --noEmit -p tsconfig.renderer-offline.json"
   },
