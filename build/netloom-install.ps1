@@ -4,21 +4,29 @@
 #
 # Коды выхода: 0 — скачан и проверен; 2 — не удалось скачать; 3 — контрольная сумма не совпала (файл удалён);
 #              4 — неверные параметры.
+# -Log — журнал (дописывается), чтобы причину было видно и при тихой установке.
 param(
   [Parameter(Mandatory = $true)][string]$Url,
   [Parameter(Mandatory = $true)][string]$Sha256,
   [Parameter(Mandatory = $true)][string]$Out,
-  [long]$ExpectedBytes = 0
+  [long]$ExpectedBytes = 0,
+  [string]$Log = ''
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+function Say([string]$Text) {
+  Write-Output $Text
+  # Кодировка журнала — ANSI системы, как у строк, которые дописывает установщик NSIS
+  if ($Log) { try { Add-Content -LiteralPath $Log -Value $Text -Encoding Default } catch { } }
+}
 
 function Remove-Download {
   if (Test-Path -LiteralPath $Out) { Remove-Item -LiteralPath $Out -Force -ErrorAction SilentlyContinue }
 }
 
-if ($Url -notmatch '^https://') { Write-Output 'Адрес загрузки должен начинаться с https://'; exit 4 }
-if ($Sha256 -notmatch '^[0-9a-fA-F]{64}$') { Write-Output 'Неверная контрольная сумма в установщике'; exit 4 }
+if ($Url -notmatch '^https://') { Say 'Адрес загрузки должен начинаться с https://'; exit 4 }
+if ($Sha256 -notmatch '^[0-9a-fA-F]{64}$') { Say 'Неверная контрольная сумма в установщике'; exit 4 }
 
 # GitHub принимает только TLS 1.2 и новее; в Windows PowerShell 5.1 его иногда нужно включить явно
 try {
@@ -51,7 +59,7 @@ try {
     if ($total -gt 0) {
       $pct = [math]::Floor(100 * $done / $total)
       if ($pct -ge $nextPct) {
-        Write-Output ('  загружено {0} % ({1} из {2} МБ)' -f $pct, [math]::Round($done / 1MB), [math]::Round($total / 1MB))
+        Say ('  загружено {0} % ({1} из {2} МБ)' -f $pct, [math]::Round($done / 1MB), [math]::Round($total / 1MB))
         $nextPct = $pct - ($pct % 10) + 10
       }
     }
@@ -62,7 +70,7 @@ try {
   if ($in) { $in.Close() }
   if ($resp) { $resp.Close() }
   Remove-Download
-  Write-Output ('Не удалось скачать: ' + $_.Exception.Message)
+  Say ('Не удалось скачать: ' + $_.Exception.Message)
   exit 2
 }
 $in.Close()
@@ -71,8 +79,8 @@ $resp.Close()
 $actual = (Get-FileHash -LiteralPath $Out -Algorithm SHA256).Hash
 if ($actual -ne $Sha256) {
   Remove-Download
-  Write-Output ('Контрольная сумма не совпала: ожидалась {0}, получена {1}' -f $Sha256.ToLowerInvariant(), $actual.ToLowerInvariant())
+  Say ('Контрольная сумма не совпала: ожидалась {0}, получена {1}' -f $Sha256.ToLowerInvariant(), $actual.ToLowerInvariant())
   exit 3
 }
-Write-Output 'Контрольная сумма SHA-256 совпадает.'
+Say 'Контрольная сумма SHA-256 совпадает.'
 exit 0

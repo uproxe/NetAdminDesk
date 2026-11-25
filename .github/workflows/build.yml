@@ -160,6 +160,10 @@ jobs:
           $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\NetLoom'
           if (Test-Path $key) { throw 'NetLoom уже стоит на раннере — проверка была бы неточной' }
           $setup = Start-Process -FilePath "release\${{ matrix.artifact }}" -ArgumentList '/S', '/NETLOOM=1' -Wait -PassThru
+          $log = Join-Path $env:TEMP 'NetAdminDesk-NetLoom.log'
+          Write-Host "--- журнал $log ---"
+          if (Test-Path $log) { Get-Content $log -Encoding ([Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.ANSICodePage)) } else { Write-Host '(журнала нет — до установки NetLoom дело не дошло)' }
+          Write-Host '---'
           if ($setup.ExitCode -ne 0) { throw "Установщик завершился с кодом $($setup.ExitCode)" }
           $got = (Get-ItemProperty $key -ErrorAction SilentlyContinue).DisplayVersion
           if ($got -ne $ver) { throw "NetLoom $ver не установлен (в списке программ: '$got')" }

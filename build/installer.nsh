@@ -23,6 +23,16 @@
 
 !define NETLOOM_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\NetLoom"
 !define NETLOOM_RELEASES "https://github.com/uproxe/NetLoom/releases"
+; Журнал установки NetLoom (в папке временных файлов пользователя) — причина видна и при /S
+!define NETLOOM_LOG "$TEMP\NetAdminDesk-NetLoom.log"
+
+; Дописать строку в журнал (ANSI системы; $4 — рабочий регистр)
+!macro NetLoomLog text
+  FileOpen $4 "${NETLOOM_LOG}" a
+  FileSeek $4 0 END
+  FileWrite $4 "${text}$\r$\n"
+  FileClose $4
+!macroend
 
 Var NetLoomWanted     ; 1 — ставить NetLoom
 Var NetLoomInstalled  ; установленная версия NetLoom или пусто
@@ -76,9 +86,13 @@ Var NetLoomBoldFont
     File "/oname=$PLUGINSDIR\netloom-install.ps1" "${BUILD_RESOURCES_DIR}\netloom-install.ps1"
     StrCpy $2 "$PLUGINSDIR\NetLoom-${NETLOOM_VERSION}-setup.exe"
     StrCpy $1 ""
+    Delete "${NETLOOM_LOG}"
+    !insertmacro NetLoomLog "NetAdmin Desk: установка браузера NetLoom ${NETLOOM_VERSION}"
+    !insertmacro NetLoomLog "Загрузка: ${NETLOOM_URL}"
 
-    nsExec::ExecToLog /OEM '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\netloom-install.ps1" -Url "${NETLOOM_URL}" -Sha256 "${NETLOOM_SHA256}" -Out "$2" -ExpectedBytes ${NETLOOM_BYTES}'
+    nsExec::ExecToLog /OEM '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\netloom-install.ps1" -Url "${NETLOOM_URL}" -Sha256 "${NETLOOM_SHA256}" -Out "$2" -ExpectedBytes ${NETLOOM_BYTES} -Log "${NETLOOM_LOG}"'
     Pop $0
+    !insertmacro NetLoomLog "Загрузка и проверка: код $0"
     ${If} $0 == 2
       StrCpy $1 "не удалось скачать файл с github.com — нет интернета или доступ к GitHub закрыт."
     ${ElseIf} $0 == 3
@@ -87,11 +101,13 @@ Var NetLoomBoldFont
       StrCpy $1 "не удалось запустить загрузку через PowerShell (код $0) — возможно, PowerShell запрещён политикой."
     ${EndIf}
     ${If} $1 != ""
+      !insertmacro NetLoomLog "Ошибка: $1"
       Delete "$2"
       SetOutPath "$TEMP"
       Return
     ${EndIf}
 
+    !insertmacro NetLoomLog "Запуск установщика NetLoom в тихом режиме"
     ClearErrors
     ExecWait '"$2" /S' $0
     ${If} ${Errors}
@@ -104,9 +120,14 @@ Var NetLoomBoldFont
       ${If} $0 == "${NETLOOM_VERSION}"
         StrCpy $0 0
       ${Else}
-        StrCpy $1 "после установки NetLoom ${NETLOOM_VERSION} не найден в списке программ."
+        StrCpy $1 "после установки NetLoom ${NETLOOM_VERSION} не найден в списке программ (там: «$0»)."
         StrCpy $0 1
       ${EndIf}
+    ${EndIf}
+    ${If} $0 == 0
+      !insertmacro NetLoomLog "Готово: NetLoom ${NETLOOM_VERSION} установлен."
+    ${Else}
+      !insertmacro NetLoomLog "Ошибка: $1"
     ${EndIf}
     Delete "$2"
     SetOutPath "$TEMP"
@@ -183,6 +204,8 @@ Var NetLoomBoldFont
     Push $0
     Push $1
     Push $2
+    Push $3
+    Push $4
     DetailPrint "Браузер NetLoom ${NETLOOM_VERSION}: загрузка с github.com (около ${NETLOOM_SIZE_MB} МБ)…"
     ${If} ${UAC_IsInnerInstance}
       !insertmacro UAC_AsUser_Call Function NetLoomDoInstall ${UAC_SYNCREGISTERS}
@@ -193,9 +216,11 @@ Var NetLoomBoldFont
       DetailPrint "Браузер NetLoom ${NETLOOM_VERSION} установлен."
     ${Else}
       DetailPrint "Браузер NetLoom не установлен: $1"
-      MessageBox MB_OK|MB_ICONEXCLAMATION "NetAdmin Desk установлен, а браузер NetLoom — нет:$\r$\n$1$\r$\n$\r$\nNetLoom можно установить позже со страницы$\r$\n${NETLOOM_RELEASES}" /SD IDOK
+      MessageBox MB_OK|MB_ICONEXCLAMATION "NetAdmin Desk установлен, а браузер NetLoom — нет:$\r$\n$1$\r$\n$\r$\nПодробности — в журнале %TEMP%\NetAdminDesk-NetLoom.log.$\r$\nNetLoom можно установить позже со страницы$\r$\n${NETLOOM_RELEASES}" /SD IDOK
     ${EndIf}
     SetOutPath "$INSTDIR"
+    Pop $4
+    Pop $3
     Pop $2
     Pop $1
     Pop $0
