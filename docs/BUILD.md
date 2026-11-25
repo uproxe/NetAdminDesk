@@ -70,6 +70,8 @@ node scripts/update-netloom.mjs 1.0.4   # скачает установщик Ne
 git diff build/netloom.nsh               # проверить и закоммитить
 ```
 
+Сценарий загрузки не использует `Get-FileHash` и другие команды из модулей-сценариев: если установщик запущен из PowerShell 7, Windows PowerShell 5.1 наследует его пути модулей (`PSModulePath`) и не может их загрузить. Сумма считается средствами .NET во время загрузки. Шаги пишутся в журнал `%TEMP%\NetAdminDesk-NetLoom.log` (UTF-16 с BOM).
+
 `build/installer.nsh`, `build/netloom.nsh` и `build/netloom-install.ps1` хранятся в UTF-8 **с BOM**: NSIS и Windows PowerShell 5.1 без BOM читают файл в кодировке системы, и русский текст исказится (это проверяет тест `tests/unit/installer.test.ts`).
 
 ### Иконки
