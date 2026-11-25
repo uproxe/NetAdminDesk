@@ -13,8 +13,12 @@
 !ifndef BUILD_UNINSTALLER
 
 !include "${BUILD_RESOURCES_DIR}\netloom.nsh"
+; Заголовки подключаются здесь явно: шаблон electron-builder подключает не все из них
+; (например, WordFunc для ${VersionCompare} в версии 26.18 не подключён)
+!include LogicLib.nsh
 !include FileFunc.nsh
 !include WinVer.nsh
+!include WordFunc.nsh
 !include nsDialogs.nsh
 
 !define NETLOOM_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\NetLoom"
