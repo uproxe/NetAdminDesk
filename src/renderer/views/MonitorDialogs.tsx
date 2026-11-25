@@ -102,8 +102,18 @@ export function NodeEditor({ node, onClose }: { node?: MonitorNode; onClose: () 
               <option value={1}>v1 (старые устройства)</option>
             </select>
           </Field>
-          <Field label="Community" hint={node?.hasCommunity && community === undefined ? 'Сохранена. Введите новую, чтобы заменить.' : 'Хранится в защищённом хранилище'}>
-            <input className="input" type="password" autoComplete="off" disabled={!canStore} placeholder={node?.hasCommunity ? '•••••••• (сохранена)' : 'public'} value={community ?? ''} onChange={(e) => setCommunity(e.target.value)} />
+          <Field
+            label="Community"
+            hint={
+              node?.hasCommunity && community === undefined
+                ? 'Сохранена. Введите новую, чтобы заменить.'
+                : !node?.hasCommunity && !community
+                  ? 'Обязательна для SNMP — без неё узел проверяется только ping. Если на устройстве её не меняли, чаще всего это public.'
+                  : 'Хранится в защищённом хранилище'
+            }
+          >
+            {/* Подсказка-заглушка не похожа на значение: раньше серое «public» принимали за введённую community */}
+            <input className="input" type="password" autoComplete="off" disabled={!canStore} placeholder={node?.hasCommunity ? '•••••••• (сохранена)' : 'не задана'} value={community ?? ''} onChange={(e) => setCommunity(e.target.value)} />
           </Field>
           <Field label="UDP-порт">
             <input className="input" type="number" min={1} max={65535} value={n.snmpPort} onChange={(e) => set({ snmpPort: Number(e.target.value) || 161 })} />
